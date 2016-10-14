@@ -17,8 +17,8 @@ usage = "Usage: python3 " + sys.argv[0] + """
     The output contains lines with the format: imageFile
         'horizon' specifies a cell row, above which cells should be ignored by the coarse scanner.
             0 specifies the top row, 1 specifies the 2nd row, etc.
-        Each such line is followed by lines for each row, containing 0s, 1s, and 2s.
-            A line '0112' specifies 4 cells of a row, of which 2 are water and 1 is 'above the horizon'.
+        Each such line is followed by indented lines for each row, containing 0s, 1s, and 2s.
+            A line ' 0112' specifies 4 cells of a row (unmarked, water, water, above horizon)
 """
 
 #check command line arguments
@@ -154,6 +154,7 @@ def returnCallback(event):
 	#output info
 	print(filenames[filenameIdx])
 	for row in range(len(cells[0])):
+		print(" ", end="")
 		for col in range(len(cells)):
 			print(cells[col][row][0], end="")
 		print()
