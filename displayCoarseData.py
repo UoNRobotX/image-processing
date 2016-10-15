@@ -105,7 +105,7 @@ def returnCallback(event):
         filename = images[imageIdx][0]
         window.title(filename)
         image = Image.open(filename)
-        draw = ImageDraw.Draw(image)
+        draw = ImageDraw.Draw(image, "RGBA")
         canvas.config(width=image.size[0], height=image.size[1])
         canvas.pack()
         imageTk = ImageTk.PhotoImage(image)
