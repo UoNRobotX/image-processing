@@ -1,38 +1,48 @@
 import sys, os, math, random
 import numpy as np
-from PIL import Image, ImageTk, ImageDraw
+from PIL import Image, ImageDraw
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ [-t trData1] [-e testData1] [-r image1] [-s data1] [-n]
-    Creates/trains/tests/runs a neural network for recognising buoys.
-    By default, saved network values are loaded, if the corresponding files exist.
+usage = "Usage: python3 " + sys.argv[0] + """ [-c] [-d] [-n] [-t data1] [-e data1] [-r file1] [-s data1]
+    Loads/trains/tests/runs the coarse/detailed/both networks.
+    By default, network values are loaded from files if they exist, and nothing is done.
 
     Options:
-        -t trData1
-            Train the network.
-            'trData1' specifies images and bounding boxes.
-        -e testData1
-            Test the network.
-            'testData1' specifies images and bounding boxes.
-        -r image1
-            Run the network on an input image, specified by 'image1'.
-        -s
-            Generate input samples.
-            'testData1' specifies images and bounding boxes.
+        -c
+            Only use the coarse network.
+        -d
+            Only use the detailed network.
+        -t data1
+            Train the network, using training data specified by 'data1'.
+            Must be used with -c or -d.
+        -e data1
+            Test the network, using testing data specified by 'data1'.
+            If neither -c nor -d is used, 'data1' should specify input for the detailed network.
+        -r file1
+            Run the network on image file1, specified by 'image1'.
+        -s data1
+            Generate network input samples, using training/testing data specified by 'data1'.
+            Must be used with -c or -d.
         -n
-            Do not load a saved network.
+            Re-initialise values for the network.
 """
 
 #process command line arguments
-trainingFile = None
-testingFile  = None
-runningFile  = None
-samplesFile  = None
-loadSaved    = True
+useCoarseOnly   = False
+useDetailedOnly = False
+trainingFile    = None
+testingFile     = None
+runningFile     = None
+samplesFile     = None
+reinitialise    = False
 i = 1
 while i < len(sys.argv):
     arg = sys.argv[i]
-    if arg == "-t":
+    if arg == "-c":
+        useCoarseOnly = True
+    elif arg == "-d":
+        useDetailedOnly = True
+    elif arg == "-t":
         i += 1
         if i < len(sys.argv):
             trainingFile = sys.argv[i]
@@ -61,11 +71,18 @@ while i < len(sys.argv):
             print("No argument for -s", file=sys.stderr)
             sys.exit(1)
     elif arg == "-n":
-        loadSaved = False
+        reinitialise = True
     else:
         print(usage)
         sys.exit(0)
     i += 1
+if useCoarseOnly and useDetailedOnly:
+    print("-c and -d cannot be used together", file=sys.stderr)
+    sys.exit(1)
+if trainingFile != None or samplesFile != None:
+    if not useCoarseOnly and not useDetailedOnly:
+        print("With -t or -s, -c or -d is required", file=sys.stderr)
+        sys.exit(1)
 
 #constants
 IMG_HEIGHT           = 960
@@ -77,35 +94,110 @@ IMG_SCALED_WIDTH     = IMG_WIDTH  // IMG_DOWNSCALE
 INPUT_HEIGHT         = 32
 INPUT_WIDTH          = 32
 INPUT_CHANNELS       = 3
-SAVE_FILE            = "modelData/model.ckpt"
-RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"
-SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg"
-TRAINING_STEPS       = 200
-TRAINING_BATCH_SIZE  = 50
-TRAINING_LOG_PERIOD  = 100
-TESTING_BATCH_SIZE   = 50
+SAVE_FILE            = "modelData/model.ckpt"   #save/load network values to/from here
+RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"  #with -r, a representation of the output is saved here
+SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg" #with -s, a representation of the output is saved here
+TRAINING_STEPS       = 100 #with -t, the number of training iterations
+TRAINING_BATCH_SIZE  = 50  #with -t, the number of inputs per training iteration
+TRAINING_LOG_PERIOD  = 50 #with -t, informative lines are printed after this many training iterations
+TESTING_BATCH_SIZE   = 50  #with -e, the number of inputs used for testing
 
-#class for producing input data
-class BatchProducer:
-    "Produces batches of training/test data"
+#classes for producing input values
+class CoarseBatchProducer:
+    "Produces input values for the coarse network"
     VALUES_PER_IMAGE = 100
+    #constructor
     def __init__(self, dataFile):
-        self.filenames = []
-        self.boxes = []
+        self.filenames = [] #list of image files
+        self.cells = []     #has the form [[[c1, c2, ...], ...], ...], specifying cells of image files
         self.fileIdx = 0
         self.image = None
+        self.data = None
         self.valuesGenerated = 0
-        #read data file
+        #read 'dataFile' (should have the same format as output by 'genCoarseData.py')
+        cellsDict = dict()
+        filename = None
+        with open(dataFile) as file:
+            for line in file:
+                if line[0] != " ":
+                    filename = line.strip()
+                    self.filenames.append(filename)
+                    cellsDict[filename] = []
+                else:
+                    cellsDict[filename].append([int(c) for c in line.strip()])
+        random.shuffle(self.filenames)
+        self.cells = [cellsDict[name] for name in self.filenames]
+        if len(self.filenames) == 0:
+            raise Exception("no filenames")
+        #obtain PIL image
+        self.image = Image.open(self.filenames[self.fileIdx])
+        self.image = self.image.resize(
+            (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
+            resample=Image.LANCZOS
+        )
+        #obtain numpy array
+        self.data = np.array(list(self.image.getdata())).astype(np.float32)
+        self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
+    def getBatch(self, size):
+        inputs = []
+        outputs = []
+        while size > 0:
+            if self.valuesGenerated == self.VALUES_PER_IMAGE:
+                #open next image file
+                self.fileIdx += 1
+                if self.fileIdx+1 > len(self.filenames):
+                    self.fileIdx = 0
+                self.image = Image.open(self.filenames[self.fileIdx])
+                self.image = self.image.resize(
+                    (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
+                    resample=Image.LANCZOS
+                )
+                self.data = np.array(list(self.image.getdata())).astype(np.float32)
+                self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+                self.valuesGenerated = 0
+            #get an input and output
+            while True:
+                #randomly select a grid cell
+                i = math.floor(random.random()*((IMG_SCALED_WIDTH  - 1) // INPUT_WIDTH))
+                j = math.floor(random.random()*((IMG_SCALED_HEIGHT - 1) // INPUT_HEIGHT))
+                #skip cells above the horizon
+                     # TODO: this can cause an infinite loop if all cells are above the horizon
+                if self.cells[self.fileIdx][j][i] == 2:
+                    continue
+                #get an input
+                x = i*INPUT_WIDTH
+                y = j*INPUT_HEIGHT
+                inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+                #get an output
+                outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
+                break
+            #update
+            self.valuesGenerated += 1
+            size -= 1
+        return np.array(inputs), np.array(outputs).astype(np.float32)
+class BatchProducer:
+    "Produces input values for the detailed network"
+    VALUES_PER_IMAGE = 100
+    #constructor
+    def __init__(self, dataFile):
+        self.filenames = [] #list of image files
+        self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
+        self.fileIdx = 0
+        self.image = None
+        self.data = None
+        self.valuesGenerated = 0
+        #read 'dataFile' (should have the same format as output by 'genData.py')
         filenameSet = set()
         boxesDict = dict()
         with open(dataFile) as file:
             for line in file:
                 record = line.strip().split(",")
                 filenameSet.add(record[0])
-                if record[0] in boxesDict:
-                    boxesDict[record[0]].append([int(field) for field in record[1:5]])
-                else:
+                if not record[0] in boxesDict:
                     boxesDict[record[0]] = [[int(field) for field in record[1:5]]]
+                else:
+                    boxesDict[record[0]].append([int(field) for field in record[1:5]])
         self.filenames = list(filenameSet)
         random.shuffle(self.filenames)
         self.boxes = [boxesDict[name] for name in self.filenames]
@@ -120,32 +212,13 @@ class BatchProducer:
         #obtain numpy array
         self.data = np.array(list(self.image.getdata())).astype(np.float32)
         self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
         while size > 0:
-            if self.valuesGenerated < self.VALUES_PER_IMAGE:
-                #get an input
-                x = math.floor(random.random()*(IMG_SCALED_WIDTH  - INPUT_WIDTH))
-                y = math.floor(random.random()*(IMG_SCALED_HEIGHT - INPUT_HEIGHT))
-                inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
-                #get an output
-                topLeftX = x*IMG_DOWNSCALE + 15
-                topLeftY = y*IMG_DOWNSCALE + 15
-                bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE - 15
-                bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE - 15
-                hasOverlappingBox = False
-                for box in self.boxes[self.fileIdx]:
-                    if (not box[2] < topLeftX and
-                        not box[0] > bottomRightX and
-                        not box[3] < topLeftY and
-                        not box[1] > bottomRightY):
-                        hasOverlappingBox = True
-                        break
-                outputs.append([1, 0] if hasOverlappingBox else [0, 1])
-                #update
-                self.valuesGenerated += 1
-            else:
+            if self.valuesGenerated == self.VALUES_PER_IMAGE:
+                #open next image file
                 self.fileIdx += 1
                 if self.fileIdx+1 > len(self.filenames):
                     self.fileIdx = 0
@@ -157,83 +230,149 @@ class BatchProducer:
                 self.data = np.array(list(self.image.getdata())).astype(np.float32)
                 self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
                 self.valuesGenerated = 0
-                continue
+            #randomly select a square
+            x = math.floor(random.random()*(IMG_SCALED_WIDTH  - INPUT_WIDTH))
+            y = math.floor(random.random()*(IMG_SCALED_HEIGHT - INPUT_HEIGHT))
+            #get an input
+            inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+            #get an output
+            topLeftX = x*IMG_DOWNSCALE + 15
+            topLeftY = y*IMG_DOWNSCALE + 15
+            bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE - 15
+            bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE - 15
+            hasOverlappingBox = False
+            for box in self.boxes[self.fileIdx]:
+                if (not box[2] < topLeftX and
+                    not box[0] > bottomRightX and
+                    not box[3] < topLeftY and
+                    not box[1] > bottomRightY):
+                    hasOverlappingBox = True
+                    break
+            outputs.append([1, 0] if hasOverlappingBox else [0, 1])
+            #update
+            self.valuesGenerated += 1
             size -= 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 #create computation graph
 x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS])
-#helper functions
-def createWeights(shape):
-    return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
-def createBiases(shape):
-    return tf.Variable(tf.constant(0.1, shape=shape))
-def createConv(x, w, b):
-    xw = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME")
-    return tf.nn.relu(xw + b)
-def createPool(c):
-    return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
-#first convolutional layer
-w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
-b1 = createBiases([32])
-c1 = createConv(x, w1, b1)
-p1 = createPool(c1)
-#second convolutional layer
-w2 = createWeights([5, 5, 32, 64])
-b2 = createBiases([64])
-c2 = createConv(p1, w2, b2)
-p2 = createPool(c2)
-#densely connected layer
-w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
-b3 = createBiases([1024])
-p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
-h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
-#dropout
+y_ = tf.placeholder(tf.float32, [None, 2])
 p_dropout = tf.placeholder(tf.float32)
-h1_dropout = tf.nn.dropout(h1, p_dropout)
-#readout layer
-w4 = createWeights([1024, 2])
-b4 = createBiases([2])
-y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
-#cost
-y2 = tf.placeholder(tf.float32, [None, 2])
-cross_entropy = tf.reduce_mean(
-    -tf.reduce_sum(y2 * tf.log(tf.clip_by_value(y,1e-10,1.0)),
-    reduction_indices=[1])
-)
-#optimizer
-train = tf.train.AdamOptimizer().minimize(cross_entropy)
-#accuracy
-correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y2, 1))
-accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+def createCoarseNetwork(x, y_):
+    x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
+    w = tf.Variable(tf.truncated_normal([INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2], stddev=0.1))
+    b = tf.Variable(tf.constant(0.1, shape=[2]))
+    y = tf.nn.sigmoid(tf.matmul(x_flat, w) + b)
+    #cost
+    cost = tf.reduce_mean(tf.square(y_ - y), reduction_indices=[1])
+    #optimizer
+    train = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
+    #accuracy
+    correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+    accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+    #variables
+    variables = [w, b]
+    #return output nodes and trainer
+    return y, accuracy, train, variables
+def createDetailedNetwork(x, y_, p_dropout):
+    #helper functions
+    def createWeights(shape):
+        return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
+    def createBiases(shape):
+        return tf.Variable(tf.constant(0.1, shape=shape))
+    def createConv(x, w, b):
+        xw = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME")
+        return tf.nn.relu(xw + b)
+    def createPool(c):
+        return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+    #first convolutional layer
+    w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
+    b1 = createBiases([32])
+    c1 = createConv(x, w1, b1)
+    p1 = createPool(c1)
+    #second convolutional layer
+    w2 = createWeights([5, 5, 32, 64])
+    b2 = createBiases([64])
+    c2 = createConv(p1, w2, b2)
+    p2 = createPool(c2)
+    #densely connected layer
+    w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
+    b3 = createBiases([1024])
+    p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
+    h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
+    #dropout
+    h1_dropout = tf.nn.dropout(h1, p_dropout)
+    #readout layer
+    w4 = createWeights([1024, 2])
+    b4 = createBiases([2])
+    y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
+    #cost
+    cross_entropy = tf.reduce_mean(
+        -tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)),
+        reduction_indices=[1])
+    )
+    #optimizer
+    train = tf.train.AdamOptimizer().minimize(cross_entropy)
+    #accuracy
+    correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+    accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+    #variables
+    variables = [w1, b1, w2, b2, w3, b3, w4, b4]
+    #return output nodes and trainer
+    return y, accuracy, train, variables
+cy, caccuracy, ctrain, cvariables = createCoarseNetwork(x, y_)
+y, accuracy, train, variables = createDetailedNetwork(x, y_, p_dropout)
 
-#create saver
+#create savers
 saver = tf.train.Saver(tf.all_variables())
 
 #use graph
 with tf.Session() as sess:
-    sess.run(tf.initialize_all_variables())
-    #loading
-    if loadSaved:
-        if os.path.exists(SAVE_FILE):
-            saver.restore(sess, SAVE_FILE)
-        else:
-            print("Save file does not exist", file=sys.stderr)
+    #initialising
+    if os.path.exists(SAVE_FILE):
+        saver.restore(sess, SAVE_FILE)
+    if reinitialise:
+        if not useCoarseOnly:
+            sess.run(tf.initialize_variables(variables))
+        if not useDetailedOnly:
+            sess.run(tf.initialize_variables(cvariables))
     #training
     if (trainingFile != None):
-        prod = BatchProducer(trainingFile)
-        for step in range(TRAINING_STEPS):
-            inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-            train.run(feed_dict={x: inputs, y2: outputs, p_dropout: 0.5})
-            if step % TRAINING_LOG_PERIOD == 0:
-                acc = accuracy.eval(feed_dict={x: inputs, y2: outputs, p_dropout: 1.0})
-                print("step %d, accuracy %g" % (step, acc))
+        if useCoarseOnly:
+            #train coarse network
+            prod = CoarseBatchProducer(trainingFile)
+            for step in range(TRAINING_STEPS):
+                inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
+                ctrain.run(feed_dict={x: inputs, y_: outputs})
+                if step % TRAINING_LOG_PERIOD == 0:
+                    acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
+                    print("step %d, accuracy %g" % (step, acc))
+        else:
+            #train detailed network
+            prod = BatchProducer(trainingFile)
+            for step in range(TRAINING_STEPS):
+                inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
+                train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
+                if step % TRAINING_LOG_PERIOD == 0:
+                    acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
+                    print("step %d, accuracy %g" % (step, acc))
     #testing
     if (testingFile != None):
-        prod = BatchProducer(testingFile)
-        inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-        acc = accuracy.eval(feed_dict={x: inputs, y2: outputs, p_dropout: 1.0})
-        print("test accuracy: %g" % acc)
+        if useCoarseOnly:
+            #test coarse network
+            prod = CoarseBatchProducer(testingFile)
+            inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
+            acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
+            print("test accuracy %g" % acc)
+        elif useDetailedOnly:
+            #test detailed network
+            prod = BatchProducer(testingFile)
+            inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
+            acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
+            print("test accuracy: %g" % acc)
+        else:
+            print("Not implemented", file=sys.stderr)
+            sys.exit(1)
     #running on an image file
     if (runningFile != None):
         #obtain PIL image
@@ -249,13 +388,24 @@ with tf.Session() as sess:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
         ]
         #get results
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                output = y.eval(feed_dict={
-                    x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
-                    p_dropout: 1.0
-                })
-                p[i][j] = output[0][0]
+        if useCoarseOnly:
+            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    output = cy.eval(feed_dict={
+                        x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
+                    })
+                    p[i][j] = output[0][0]
+        elif useDetailedOnly:
+            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    output = y.eval(feed_dict={
+                        x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
+                        p_dropout: 1.0
+                    })
+                    p[i][j] = output[0][0]
+        else:
+            print("Not implemented", file=sys.stderr)
+            sys.exit(1)
         #write results to image file
         draw = ImageDraw.Draw(image, "RGBA")
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
@@ -276,7 +426,10 @@ with tf.Session() as sess:
     #generating input samples
     if (samplesFile != None):
         NUM_SAMPLES = (20, 20)
-        prod = BatchProducer(samplesFile)
+        if useCoarseOnly:
+            prod = CoarseBatchProducer(samplesFile)
+        else:
+            prod = BatchProducer(samplesFile)
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
         draw = ImageDraw.Draw(image, "RGBA")
         #get samples
