@@ -3,33 +3,39 @@ import numpy as np
 from PIL import Image, ImageDraw
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ [-c] [-d] [-n] [-t data1] [-e data1] [-r file1] [-s data1]
+usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] [-r img1] [-s df1]
     Loads/trains/tests/runs the coarse/detailed/both networks.
     By default, network values are loaded from files if they exist, and nothing is done.
 
     Options:
         -c
-            Only use the coarse network.
+            Operate on/using the coarse network.
         -d
-            Only use the detailed network.
-        -t data1
-            Train the network, using training data specified by 'data1'.
-            Must be used with -c or -d.
-        -e data1
-            Test the network, using testing data specified by 'data1'.
-            If neither -c nor -d is used, 'data1' should specify input for the detailed network.
-        -r file1
-            Run the network on image file1, specified by 'image1'.
-        -s data1
-            Generate network input samples, using training/testing data specified by 'data1'.
-            Must be used with -c or -d.
+            Operate on/using the detailed network.
         -n
             Re-initialise values for the network.
+        -f df1
+            Ignore grid cells specified by a filter from file 'df1'.
+        -t df1
+            Train the network, using training data from file 'df1'.
+            Must be used with -c or -d.
+            With -d, cells are still removed using the coarse network, and the filter if given.
+        -e df1
+            Test the network, using testing data from file 'df1'.
+            If neither -c nor -d is used, 'data1' should specify input for the detailed network.
+            With -d, cells are still removed using the coarse network, and the filter if given.
+        -r img1
+            Run the network using input image img1.
+        -s df1
+            Generate network input samples, using training/testing data from file 'df1'.
+            Must be used with -c or -d.
+            With -d, cells are still removed using the coarse network, and the filter if given.
 """
 
 #process command line arguments
 useCoarseOnly   = False
 useDetailedOnly = False
+filterFile      = None
 trainingFile    = None
 testingFile     = None
 runningFile     = None
@@ -42,6 +48,13 @@ while i < len(sys.argv):
         useCoarseOnly = True
     elif arg == "-d":
         useDetailedOnly = True
+    elif arg == "-f":
+        i += 1
+        if i < len(sys.argv):
+            filterFile = sys.argv[i]
+        else:
+            print("No argument for -f", file=sys.stderr)
+            sys.exit(1)
     elif arg == "-t":
         i += 1
         if i < len(sys.argv):
@@ -81,8 +94,16 @@ if useCoarseOnly and useDetailedOnly:
     sys.exit(1)
 if trainingFile != None or samplesFile != None:
     if not useCoarseOnly and not useDetailedOnly:
-        print("With -t or -s, -c or -d is required", file=sys.stderr)
+        print("With -t or -s, either -c or -d must be specified", file=sys.stderr)
         sys.exit(1)
+
+#read 'filterFile' (should have the same format as output by 'markImages.py' with -f)
+cellFilter = None #has the form [[flag1, ...], ...], specifying filtered cells
+if filterFile != None:
+    cellFilter = []
+    with open(filterFile) as file:
+        for line in file:
+            cellFilter.append([int(c) for c in line.strip()])
 
 #constants
 IMG_HEIGHT           = 960
@@ -99,22 +120,23 @@ RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"  #with -r, a representation of the 
 SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg" #with -s, a representation of the output is saved here
 TRAINING_STEPS       = 100 #with -t, the number of training iterations
 TRAINING_BATCH_SIZE  = 50  #with -t, the number of inputs per training iteration
-TRAINING_LOG_PERIOD  = 50 #with -t, informative lines are printed after this many training iterations
+TRAINING_LOG_PERIOD  = 50  #with -t, informative lines are printed after this many training iterations
 TESTING_BATCH_SIZE   = 50  #with -e, the number of inputs used for testing
 
 #classes for producing input values
 class CoarseBatchProducer:
     "Produces input values for the coarse network"
-    VALUES_PER_IMAGE = 100
+    VALUES_PER_IMAGE = 50
     #constructor
-    def __init__(self, dataFile):
+    def __init__(self, dataFile, cellFilter):
         self.filenames = [] #list of image files
         self.cells = []     #has the form [[[c1, c2, ...], ...], ...], specifying cells of image files
         self.fileIdx = 0
         self.image = None
         self.data = None
         self.valuesGenerated = 0
-        #read 'dataFile' (should have the same format as output by 'genCoarseData.py')
+        self.cellFilter = cellFilter
+        #read 'dataFile' (should have the same format as output by 'markImages.py' with -w)
         cellsDict = dict()
         filename = None
         with open(dataFile) as file:
@@ -161,9 +183,9 @@ class CoarseBatchProducer:
                 #randomly select a grid cell
                 i = math.floor(random.random()*((IMG_SCALED_WIDTH  - 1) // INPUT_WIDTH))
                 j = math.floor(random.random()*((IMG_SCALED_HEIGHT - 1) // INPUT_HEIGHT))
-                #skip cells above the horizon
-                     # TODO: this can cause an infinite loop if all cells are above the horizon
-                if self.cells[self.fileIdx][j][i] == 2:
+                #skip filtered cells
+                     # TODO: this can cause an infinite loop if all cells are filtered
+                if self.cellFilter != None and self.cellFilter[j][i] == 1:
                     continue
                 #get an input
                 x = i*INPUT_WIDTH
@@ -178,7 +200,7 @@ class CoarseBatchProducer:
         return np.array(inputs), np.array(outputs).astype(np.float32)
 class BatchProducer:
     "Produces input values for the detailed network"
-    VALUES_PER_IMAGE = 100
+    VALUES_PER_IMAGE = 50
     #constructor
     def __init__(self, dataFile):
         self.filenames = [] #list of image files
@@ -213,6 +235,7 @@ class BatchProducer:
         self.data = np.array(list(self.image.getdata())).astype(np.float32)
         self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
+        # TODO: make this not produce filtered, coarse-detected cells
     def getBatch(self, size):
         inputs = []
         outputs = []
@@ -340,14 +363,14 @@ with tf.Session() as sess:
     if (trainingFile != None):
         if useCoarseOnly:
             #train coarse network
-            prod = CoarseBatchProducer(trainingFile)
+            prod = CoarseBatchProducer(trainingFile, cellFilter)
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 ctrain.run(feed_dict={x: inputs, y_: outputs})
                 if step % TRAINING_LOG_PERIOD == 0:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
                     print("step %d, accuracy %g" % (step, acc))
-        else:
+        else: #useDetailedOnly
             #train detailed network
             prod = BatchProducer(trainingFile)
             for step in range(TRAINING_STEPS):
@@ -360,7 +383,7 @@ with tf.Session() as sess:
     if (testingFile != None):
         if useCoarseOnly:
             #test coarse network
-            prod = CoarseBatchProducer(testingFile)
+            prod = CoarseBatchProducer(testingFile, cellFilter)
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
             print("test accuracy %g" % acc)
@@ -391,18 +414,24 @@ with tf.Session() as sess:
         if useCoarseOnly:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    output = cy.eval(feed_dict={
-                        x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
-                    })
-                    p[i][j] = output[0][0]
+                    if cellFilter != None and cellFilter[i][j] == 1:
+                        p[i][j] = -1
+                    else:
+                        output = cy.eval(feed_dict={
+                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
+                        })
+                        p[i][j] = output[0][0]
         elif useDetailedOnly:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    output = y.eval(feed_dict={
-                        x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
-                        p_dropout: 1.0
-                    })
-                    p[i][j] = output[0][0]
+                    if cellFilter != None and cellFilter[i][j] == 1:
+                        p[i][j] = -1
+                    else:
+                        output = y.eval(feed_dict={
+                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
+                            p_dropout: 1.0
+                        })
+                        p[i][j] = output[0][0]
         else:
             print("Not implemented", file=sys.stderr)
             sys.exit(1)
@@ -410,12 +439,20 @@ with tf.Session() as sess:
         draw = ImageDraw.Draw(image, "RGBA")
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
             for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                draw.rectangle([
-                    INPUT_WIDTH*IMG_DOWNSCALE*j,
-                    INPUT_HEIGHT*IMG_DOWNSCALE*i + int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j])),
-                    INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                    INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                ], fill=(0,255,0,64))
+                if p[i][j] >= 0:
+                    draw.rectangle([
+                        INPUT_WIDTH*IMG_DOWNSCALE*j,
+                        INPUT_HEIGHT*IMG_DOWNSCALE*i + int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j])),
+                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                    ], fill=(0,255,0,64))
+                else:
+                    draw.rectangle([
+                        INPUT_WIDTH*IMG_DOWNSCALE*j,
+                        INPUT_HEIGHT*IMG_DOWNSCALE*i,
+                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                    ], fill=(196,0,0,64))
                 draw.rectangle([
                     INPUT_WIDTH*IMG_DOWNSCALE*j,
                     INPUT_HEIGHT*IMG_DOWNSCALE*i,
@@ -427,7 +464,7 @@ with tf.Session() as sess:
     if (samplesFile != None):
         NUM_SAMPLES = (20, 20)
         if useCoarseOnly:
-            prod = CoarseBatchProducer(samplesFile)
+            prod = CoarseBatchProducer(samplesFile, cellFilter)
         else:
             prod = BatchProducer(samplesFile)
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
