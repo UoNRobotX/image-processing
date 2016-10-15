@@ -23,119 +23,71 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-t trData1] [-e testData1] [-r im
             Do not load a saved network.
 """
 
+#process command line arguments
 trainingFile = None
-testingFile = None
-runningFile = None
-samplesFile = None
-loadSaved = True
+testingFile  = None
+runningFile  = None
+samplesFile  = None
+loadSaved    = True
 i = 1
 while i < len(sys.argv):
 	arg = sys.argv[i]
-	if arg == '-t':
+	if arg == "-t":
 		i += 1
 		if i < len(sys.argv):
 			trainingFile = sys.argv[i]
 		else:
-			print('No argument for -t', file=sys.stderr)
+			print("No argument for -t", file=sys.stderr)
 			sys.exit(1)
-	elif arg == '-e':
+	elif arg == "-e":
 		i += 1
 		if i < len(sys.argv):
 			testingFile = sys.argv[i]
 		else:
-			print('No argument for -e', file=sys.stderr)
+			print("No argument for -e", file=sys.stderr)
 			sys.exit(1)
-	elif arg == '-r':
+	elif arg == "-r":
 		i += 1
 		if i < len(sys.argv):
 			runningFile = sys.argv[i]
 		else:
-			print('No argument for -r', file=sys.stderr)
+			print("No argument for -r", file=sys.stderr)
 			sys.exit(1)
-	elif arg == '-s':
+	elif arg == "-s":
 		i += 1
 		if i < len(sys.argv):
 			samplesFile = sys.argv[i]
 		else:
-			print('No argument for -s', file=sys.stderr)
+			print("No argument for -s", file=sys.stderr)
 			sys.exit(1)
-	elif arg == '-n':
+	elif arg == "-n":
 		loadSaved = False
 	else:
 		print(usage)
 		sys.exit(0)
 	i += 1
 
-#create computation graph
-INPUT_HEIGHT   = 32
-INPUT_WIDTH    = 32
-INPUT_CHANNELS = 3
-#input image
-x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS])
-#helper functions
-def createWeights(shape):
-	return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
-def createBiases(shape):
-	return tf.Variable(tf.constant(0.1, shape=shape))
-def createConv(x, w, b):
-	xw = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding='SAME')
-	return tf.nn.relu(xw + b)
-def createPool(c):
-	return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding='SAME')
-#first convolutional layer
-w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
-b1 = createBiases([32])
-c1 = createConv(x, w1, b1)
-p1 = createPool(c1)
-#second convolutional layer
-w2 = createWeights([5, 5, 32, 64])
-b2 = createBiases([64])
-c2 = createConv(p1, w2, b2)
-p2 = createPool(c2)
-#densely connected layer
-w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
-b3 = createBiases([1024])
-p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
-h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
-#dropout
-p_dropout = tf.placeholder(tf.float32)
-h1_dropout = tf.nn.dropout(h1, p_dropout)
-#readout layer
-w4 = createWeights([1024, 2])
-b4 = createBiases([2])
-y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
-#cost
-y2 = tf.placeholder(tf.float32, [None, 2])
-cross_entropy = tf.reduce_mean(
-	-tf.reduce_sum(y2 * tf.log(tf.clip_by_value(y,1e-10,1.0)),
-	reduction_indices=[1])
-)
-#optimizer
-train = tf.train.AdamOptimizer().minimize(cross_entropy)
-#accuracy
-correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y2, 1))
-accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
-
-#create saver
-saver = tf.train.Saver(tf.all_variables())
-
-#input and output constants
+#constants
 IMG_HEIGHT           = 960
 IMG_WIDTH            = 1280
 IMG_CHANNELS         = 3
 IMG_DOWNSCALE        = 2
 IMG_SCALED_HEIGHT    = IMG_HEIGHT // IMG_DOWNSCALE
 IMG_SCALED_WIDTH     = IMG_WIDTH  // IMG_DOWNSCALE
-SAVE_FILE            = 'modelData/model.ckpt'
-RUN_OUTPUT_IMAGE     = 'outputFindBuoys.jpg'
-SAMPLES_OUTPUT_IMAGE = 'samplesFindBuoys.jpg'
+INPUT_HEIGHT         = 32
+INPUT_WIDTH          = 32
+INPUT_CHANNELS       = 3
+SAVE_FILE            = "modelData/model.ckpt"
+RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"
+SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg"
 TRAINING_STEPS       = 200
 TRAINING_BATCH_SIZE  = 50
 TRAINING_LOG_PERIOD  = 100
 TESTING_BATCH_SIZE   = 50
+
 #class for producing input data
 class BatchProducer:
-	'Produces batches of training/test data'
+	"Produces batches of training/test data"
 	VALUES_PER_IMAGE = 100
 	def __init__(self, dataFile):
 		self.filenames = []
@@ -148,7 +100,7 @@ class BatchProducer:
 		boxesDict = dict()
 		with open(dataFile) as file:
 			for line in file:
-				record = line.strip().split(',')
+				record = line.strip().split(",")
 				filenameSet.add(record[0])
 				if record[0] in boxesDict:
 					boxesDict[record[0]].append([int(field) for field in record[1:5]])
@@ -158,7 +110,7 @@ class BatchProducer:
 		random.shuffle(self.filenames)
 		self.boxes = [boxesDict[name] for name in self.filenames]
 		if len(self.filenames) == 0:
-			raise Exception('no filenames')
+			raise Exception("no filenames")
 		#obtain PIL image
 		self.image = Image.open(self.filenames[self.fileIdx])
 		self.image = self.image.resize(
@@ -208,15 +160,65 @@ class BatchProducer:
 				continue
 			size -= 1
 		return np.array(inputs), np.array(outputs).astype(np.float32)
+
+#create computation graph
+x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS])
+#helper functions
+def createWeights(shape):
+	return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
+def createBiases(shape):
+	return tf.Variable(tf.constant(0.1, shape=shape))
+def createConv(x, w, b):
+	xw = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME")
+	return tf.nn.relu(xw + b)
+def createPool(c):
+	return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+#first convolutional layer
+w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
+b1 = createBiases([32])
+c1 = createConv(x, w1, b1)
+p1 = createPool(c1)
+#second convolutional layer
+w2 = createWeights([5, 5, 32, 64])
+b2 = createBiases([64])
+c2 = createConv(p1, w2, b2)
+p2 = createPool(c2)
+#densely connected layer
+w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
+b3 = createBiases([1024])
+p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
+h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
+#dropout
+p_dropout = tf.placeholder(tf.float32)
+h1_dropout = tf.nn.dropout(h1, p_dropout)
+#readout layer
+w4 = createWeights([1024, 2])
+b4 = createBiases([2])
+y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
+#cost
+y2 = tf.placeholder(tf.float32, [None, 2])
+cross_entropy = tf.reduce_mean(
+	-tf.reduce_sum(y2 * tf.log(tf.clip_by_value(y,1e-10,1.0)),
+	reduction_indices=[1])
+)
+#optimizer
+train = tf.train.AdamOptimizer().minimize(cross_entropy)
+#accuracy
+correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y2, 1))
+accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+
+#create saver
+saver = tf.train.Saver(tf.all_variables())
+
 #use graph
 with tf.Session() as sess:
 	sess.run(tf.initialize_all_variables())
-	#load
+	#loading
 	if loadSaved:
 		if os.path.exists(SAVE_FILE):
 			saver.restore(sess, SAVE_FILE)
 		else:
-			print('Save file does not exist', file=sys.stderr)
+			print("Save file does not exist", file=sys.stderr)
 	#training
 	if (trainingFile != None):
 		prod = BatchProducer(trainingFile)
@@ -225,13 +227,13 @@ with tf.Session() as sess:
 			train.run(feed_dict={x: inputs, y2: outputs, p_dropout: 0.5})
 			if step % TRAINING_LOG_PERIOD == 0:
 				acc = accuracy.eval(feed_dict={x: inputs, y2: outputs, p_dropout: 1.0})
-				print('step %d, accuracy %g' % (step, acc))
+				print("step %d, accuracy %g" % (step, acc))
 	#testing
 	if (testingFile != None):
 		prod = BatchProducer(testingFile)
 		inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
 		acc = accuracy.eval(feed_dict={x: inputs, y2: outputs, p_dropout: 1.0})
-		print('test accuracy: %g' % acc)
+		print("test accuracy: %g" % acc)
 	#running on an image file
 	if (runningFile != None):
 		#obtain PIL image
@@ -255,7 +257,7 @@ with tf.Session() as sess:
 				})
 				p[i][j] = output[0][0]
 		#write results to image file
-		draw = ImageDraw.Draw(image, 'RGBA')
+		draw = ImageDraw.Draw(image, "RGBA")
 		for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
 			for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
 				draw.rectangle([
@@ -275,15 +277,15 @@ with tf.Session() as sess:
 	if (samplesFile != None):
 		NUM_SAMPLES = (20, 20)
 		prod = BatchProducer(samplesFile)
-		image = Image.new('RGB', (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
-		draw = ImageDraw.Draw(image, 'RGBA')
+		image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
+		draw = ImageDraw.Draw(image, "RGBA")
 		#get samples
 		for i in range(NUM_SAMPLES[0]):
 			for j in range(NUM_SAMPLES[1]):
 				inputs, outputs = prod.getBatch(1)
 				sampleImage = Image.fromarray(
 					inputs[0].astype(np.uint8),
-					'RGB'
+					"RGB"
 				)
 				image.paste(
 					sampleImage,
