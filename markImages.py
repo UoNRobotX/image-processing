@@ -222,7 +222,7 @@ def setupMarkCellHandlers(markFilter):
                             j*INPUT_HEIGHT,
                             i*INPUT_WIDTH+INPUT_WIDTH-1,
                             j*INPUT_HEIGHT+INPUT_HEIGHT-1,
-                            fill="orange",
+                            fill="green",
                             stipple="gray50"
                         )
         else:
