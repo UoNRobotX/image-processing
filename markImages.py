@@ -2,7 +2,7 @@ import sys, re, os
 from PIL import Image, ImageTk
 import tkinter
 
-usage = "Usage: python3 " + sys.argv[0] + """[-f] [-w] [-b] [-d dir1]
+usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d dir1]
     By default, reads a list of image filenames from stdin.
     Leading and trailing whitespace is ignored.
     Empty names, and names with commas, are ignored.
@@ -11,8 +11,8 @@ usage = "Usage: python3 " + sys.argv[0] + """[-f] [-w] [-b] [-d dir1]
     Pressing enter causes the next image to be displayed.
     Information about the images and boxes is written to stdout.
 
-    By default, -b is implied.
-    If more than one of -f, -w, -b is given, only the last is used.
+    At least one of -f, -w, or -b should be given.
+    If more than one is given, only the last is used.
 
     Options:
         -b
@@ -27,7 +27,8 @@ usage = "Usage: python3 " + sys.argv[0] + """[-f] [-w] [-b] [-d dir1]
         -w
             The user marks grid cells that contain mostly water and nothing else of significance.
             Clicking or dragging over a cell toggles whether a cell is marked.
-            Output is similar to that produced by -f.
+            The output contains lines for each row of cells, containing 0s and 1s.
+                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
         -d dir1
             Use .jpg files in dir1 as the list of filenames.
 """
@@ -36,7 +37,7 @@ usage = "Usage: python3 " + sys.argv[0] + """[-f] [-w] [-b] [-d dir1]
 MODE_BOXES  = 0 #-b
 MODE_FILTER = 1 #-f
 MODE_WATER  = 2 #-w
-mode = MODE_BOXES
+mode = None
 imageDir = None
 i = 1
 while i < len(sys.argv):
@@ -58,6 +59,9 @@ while i < len(sys.argv):
         print(usage, file=sys.stderr)
         sys.exit(1)
     i += 1
+if mode == None:
+    print("At least one of -f, -w, or -b should be given")
+    sys.exit(1)
 
 #get filenames
 filenames = []
@@ -65,7 +69,7 @@ filenameIdx = 0
 if imageDir == None:
     for line in sys.stdin:
         line = line.strip()
-        if len(line) > 0 and line.find(',') == -1:
+        if len(line) > 0 and line.find(",") == -1:
             filenames.append(line)
 else:
     filenames = [
@@ -75,7 +79,7 @@ else:
     ]
     filenames.sort()
 if len(filenames) == 0:
-    print('No specified filenames', file=sys.stderr)
+    print("No specified filenames", file=sys.stderr)
     sys.exit(1)
 
 #create window
@@ -106,7 +110,7 @@ def setupMarkBoxHandlers():
         sel[1] = [event.x, event.y]
         canvas.delete(box)
         box = canvas.create_rectangle(
-            sel[0][0], sel[0][1], sel[1][0], sel[1][1], outline='red', width=2
+            sel[0][0], sel[0][1], sel[1][0], sel[1][1], outline="red", width=2
         )
     def releaseCallback(event):
         sel[1] = [event.x, event.y]
@@ -116,7 +120,7 @@ def setupMarkBoxHandlers():
                 sel[0][0], sel[0][1], sel[1][0], sel[1][1]
             )
         )
-        print('%s,%d,%d,%d,%d' % (filenames[filenameIdx], sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
+        print("%s,%d,%d,%d,%d" % (filenames[filenameIdx], sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
     def returnCallback(event):
         global filenameIdx, image, imageTk, boxes
         #move to next file, or exit
