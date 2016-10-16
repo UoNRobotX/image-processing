@@ -255,7 +255,6 @@ class BatchProducer:
         else:
             self.unfilteredCells = range(colSize * rowSize)
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
-        # TODO: make this not produce filtered, coarse-detected cells
     def getBatch(self, size):
         inputs = []
         outputs = []
