@@ -127,9 +127,6 @@ INPUT_WIDTH   = 32*IMG_DOWNSCALE
 def drawMarks(mode):
     if mode == MODE_BOXES:
         for box in records[fileIdx]:
-            canvas.create_rectangle(
-                box[0], box[1], box[2], box[3], outline="red", width=2
-            )
             draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
     else:
         cells = records if mode == MODE_FILTER else records[fileIdx]
@@ -140,16 +137,12 @@ def drawMarks(mode):
                 bottomRightX = i*INPUT_WIDTH+INPUT_WIDTH-1
                 bottomRightY = j*INPUT_HEIGHT+INPUT_HEIGHT-1
                 #draw grid box
-                canvas.create_rectangle(topLeftX, topLeftY, bottomRightX, bottomRightY)
                 draw.rectangle(
                     [topLeftX, topLeftY, bottomRightX, bottomRightY],
                     outline=(0,0,0)
                 )
                 #draw marking
                 if cells[j][i] == 1:
-                    canvas.create_rectangle(
-                        topLeftX, topLeftY, bottomRightX, bottomRightY, fill="green", stipple="gray50"
-                    )
                     draw.rectangle(
                         [topLeftX, topLeftY, bottomRightX, bottomRightY],
                         fill=(0,128,0,128)
@@ -158,20 +151,16 @@ def drawMarks(mode):
 #draw boxes/cells for current image file
 drawMarks(mode)
 
-#tag canvas items
-canvas.addtag_all("tag")
-
 #handler functions
 def resizeCallback(event):
     global canvasWidth, canvasHeight, imageTk, canvasImage
-    wscale = float(event.width)/canvasWidth
-    hscale = float(event.height)/canvasHeight
     canvasWidth = event.width
     canvasHeight = event.height
     canvas.config(width=canvasWidth, height=canvasHeight)
-    canvas.scale("tag", 0, 0, wscale, hscale)
     canvas.delete(canvasImage)
-    imageTk = ImageTk.PhotoImage(image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS))
+    imageTk = ImageTk.PhotoImage(
+        image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+    )
     canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
 def returnCallback(event):
     global fileIdx, image, draw, imageTk, canvasImage
@@ -189,10 +178,6 @@ def returnCallback(event):
         draw = ImageDraw.Draw(image, "RGBA")
         #draw marks, and scale them
         drawMarks(mode)
-        canvas.addtag_all("tag")
-        wscale = float(canvasWidth)/image.size[0]
-        hscale = float(canvasHeight)/image.size[1]
-        canvas.scale("tag", 0, 0, wscale, hscale)
         #add scaled image
         imageTk = ImageTk.PhotoImage(
             image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
