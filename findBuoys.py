@@ -145,7 +145,7 @@ class CoarseBatchProducer:
         random.shuffle(self.filenames)
         self.cells = [cellsDict[name] for name in self.filenames]
         if len(self.filenames) == 0:
-            raise Exception("no filenames")
+            raise Exception("No filenames")
         #obtain PIL image
         self.image = Image.open(self.filenames[self.fileIdx])
         self.image = self.image.resize(
@@ -164,13 +164,15 @@ class CoarseBatchProducer:
                 for col in range(len(cellFilter[row])):
                     if cellFilter[row][col] == 0:
                         self.unfilteredCells.append(col+row*rowSize)
+            if len(self.unfilteredCells) == 0:
+                raise Exception("No unfiltered cells")
         else:
             self.unfilteredCells = range(colSize * rowSize)
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
-        while size > 0:
+        for i in range(size):
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 #open next image file
                 self.fileIdx += 1
@@ -184,37 +186,34 @@ class CoarseBatchProducer:
                 self.data = np.array(list(self.image.getdata())).astype(np.float32)
                 self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
                 self.valuesGenerated = 0
-            #get an input and output
-            while True:
-                #randomly select a non-filtered grid cell
-                idx = self.unfilteredCells[
-                    math.floor(random.random() * len(self.unfilteredCells))
-                ]
-                rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
-                i = idx % rowSize
-                j = idx // rowSize
-                #get an input
-                x = i*INPUT_WIDTH
-                y = j*INPUT_HEIGHT
-                inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
-                #get an output
-                outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
-                break
+            #randomly select a non-filtered grid cell
+            idx = self.unfilteredCells[
+                math.floor(random.random() * len(self.unfilteredCells))
+            ]
+            rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
+            i = idx % rowSize
+            j = idx // rowSize
+            x = i*INPUT_WIDTH
+            y = j*INPUT_HEIGHT
+            #get an input
+            inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+            #get an output
+            outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
             #update
             self.valuesGenerated += 1
-            size -= 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 class BatchProducer:
     "Produces input values for the detailed network"
-    VALUES_PER_IMAGE = 50
+    VALUES_PER_IMAGE = 30
     #constructor
-    def __init__(self, dataFile):
+    def __init__(self, dataFile, cellFilter):
         self.filenames = [] #list of image files
         self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
         self.fileIdx = 0
         self.image = None
         self.data = None
         self.valuesGenerated = 0
+        self.unfilteredCells = None
         #read 'dataFile' (should have the same format as output by 'genData.py')
         filenameSet = set()
         boxesDict = dict()
@@ -230,7 +229,7 @@ class BatchProducer:
         random.shuffle(self.filenames)
         self.boxes = [boxesDict[name] for name in self.filenames]
         if len(self.filenames) == 0:
-            raise Exception("no filenames")
+            raise Exception("No filenames")
         #obtain PIL image
         self.image = Image.open(self.filenames[self.fileIdx])
         self.image = self.image.resize(
@@ -240,6 +239,19 @@ class BatchProducer:
         #obtain numpy array
         self.data = np.array(list(self.image.getdata())).astype(np.float32)
         self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+        #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
+        rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
+        colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
+        if cellFilter != None:
+            self.unfilteredCells = []
+            for row in range(len(cellFilter)):
+                for col in range(len(cellFilter[row])):
+                    if cellFilter[row][col] == 0:
+                        self.unfilteredCells.append(col+row*rowSize)
+            if len(self.unfilteredCells) == 0:
+                raise Exception("No unfiltered cells")
+        else:
+            self.unfilteredCells = range(colSize * rowSize)
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
         # TODO: make this not produce filtered, coarse-detected cells
     def getBatch(self, size):
@@ -259,9 +271,15 @@ class BatchProducer:
                 self.data = np.array(list(self.image.getdata())).astype(np.float32)
                 self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
                 self.valuesGenerated = 0
-            #randomly select a square
-            x = math.floor(random.random()*(IMG_SCALED_WIDTH  - INPUT_WIDTH))
-            y = math.floor(random.random()*(IMG_SCALED_HEIGHT - INPUT_HEIGHT))
+            #randomly select a non-filtered grid cell
+            idx = self.unfilteredCells[
+                math.floor(random.random() * len(self.unfilteredCells))
+            ]
+            rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
+            i = idx % rowSize
+            j = idx // rowSize
+            x = i*INPUT_WIDTH
+            y = j*INPUT_HEIGHT
             #get an input
             inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
             #get an output
@@ -377,7 +395,7 @@ with tf.Session() as sess:
                     print("step %d, accuracy %g" % (step, acc))
         else:
             #train detailed network
-            prod = BatchProducer(trainingFile)
+            prod = BatchProducer(trainingFile, cellFilter)
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
@@ -394,7 +412,7 @@ with tf.Session() as sess:
             print("test accuracy %g" % acc)
         else:
             #test detailed network
-            prod = BatchProducer(testingFile)
+            prod = BatchProducer(testingFile, cellFilter)
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
             print("test accuracy: %g" % acc)
@@ -478,7 +496,7 @@ with tf.Session() as sess:
         if useCoarse:
             prod = CoarseBatchProducer(samplesFile, cellFilter)
         else:
-            prod = BatchProducer(samplesFile)
+            prod = BatchProducer(samplesFile, cellFilter)
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
         draw = ImageDraw.Draw(image, "RGBA")
         #get samples
