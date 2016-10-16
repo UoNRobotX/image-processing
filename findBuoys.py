@@ -4,50 +4,52 @@ from PIL import Image, ImageDraw
 import tensorflow as tf
 
 usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] [-r img1] [-s df1]
-    Loads/trains/tests/runs the coarse/detailed/both networks.
+    Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist, and nothing is done.
+    If neither -c nor -d is given, the default is -c.
 
     Options:
         -c
-            Operate on/using the coarse network.
+            With -n, only re-initialise values for the coarse network.
+            With -t, train the coarse network.
+            With -e, test the coarse network, ignoring the detailed network.
+            With -r, run the coarse network on the image, ignoring the detailed network.
+            With -s, generate inputs to the coarse network.
         -d
-            Operate on/using the detailed network.
+            With -n, only re-initialise values for the detailed network.
+            With -t, train the detailed network, using the coarse network to filter input.
+            With -e, test the detailed network, using the coarse network to filter input.
+            With -r, run the detailed network on the image, using the coarse network to filter input.
+            With -s, generate inputs to the detailed network, using the coarse network to filter input.
         -n
-            Re-initialise values for the network.
+            Re-initialise values for the coarse/detailed network.
         -f df1
             Ignore grid cells specified by a filter from file 'df1'.
         -t df1
-            Train the network, using training data from file 'df1'.
-            Must be used with -c or -d.
-            With -d, cells are still removed using the coarse network, and the filter if given.
+            Train the coarse/detailed network, using training data from file 'df1'.
         -e df1
-            Test the network, using testing data from file 'df1'.
-            If neither -c nor -d is used, 'data1' should specify input for the detailed network.
-            With -d, cells are still removed using the coarse network, and the filter if given.
+            Test coarse/detailed networks, using testing data from file 'df1'.
         -r img1
-            Run the network using input image img1.
+            Run coarse/detailed networks using input image 'img1'.
         -s df1
-            Generate network input samples, using training/testing data from file 'df1'.
-            Must be used with -c or -d.
-            With -d, cells are still removed using the coarse network, and the filter if given.
+            Generate input samples for the coarse/detailed network, using data from file 'df1'.
 """
 
 #process command line arguments
-useCoarseOnly   = False
-useDetailedOnly = False
-filterFile      = None
-trainingFile    = None
-testingFile     = None
-runningFile     = None
-samplesFile     = None
-reinitialise    = False
+useCoarse    = True
+filterFile   = None
+trainingFile = None
+testingFile  = None
+runningFile  = None
+samplesFile  = None
+reinitialise = False
 i = 1
 while i < len(sys.argv):
     arg = sys.argv[i]
     if arg == "-c":
-        useCoarseOnly = True
+        useCoarse = True
     elif arg == "-d":
-        useDetailedOnly = True
+        useCoarse = False
     elif arg == "-f":
         i += 1
         if i < len(sys.argv):
@@ -89,15 +91,8 @@ while i < len(sys.argv):
         print(usage)
         sys.exit(0)
     i += 1
-if useCoarseOnly and useDetailedOnly:
-    print("-c and -d cannot be used together", file=sys.stderr)
-    sys.exit(1)
-if trainingFile != None or samplesFile != None:
-    if not useCoarseOnly and not useDetailedOnly:
-        print("With -t or -s, either -c or -d must be specified", file=sys.stderr)
-        sys.exit(1)
 
-#read 'filterFile' (should have the same format as output by 'markImages.py' with -f)
+#read 'filterFile' if given (should have the same format as output by 'markImages.py' with -f)
 cellFilter = None #has the form [[flag1, ...], ...], specifying filtered cells
 if filterFile != None:
     cellFilter = []
@@ -355,13 +350,13 @@ with tf.Session() as sess:
     if os.path.exists(SAVE_FILE):
         saver.restore(sess, SAVE_FILE)
     if reinitialise:
-        if not useCoarseOnly:
-            sess.run(tf.initialize_variables(variables))
-        if not useDetailedOnly:
+        if useCoarse:
             sess.run(tf.initialize_variables(cvariables))
+        else:
+            sess.run(tf.initialize_variables(variables))
     #training
     if (trainingFile != None):
-        if useCoarseOnly:
+        if useCoarse:
             #train coarse network
             prod = CoarseBatchProducer(trainingFile, cellFilter)
             for step in range(TRAINING_STEPS):
@@ -370,7 +365,7 @@ with tf.Session() as sess:
                 if step % TRAINING_LOG_PERIOD == 0:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
                     print("step %d, accuracy %g" % (step, acc))
-        else: #useDetailedOnly
+        else:
             #train detailed network
             prod = BatchProducer(trainingFile)
             for step in range(TRAINING_STEPS):
@@ -381,21 +376,18 @@ with tf.Session() as sess:
                     print("step %d, accuracy %g" % (step, acc))
     #testing
     if (testingFile != None):
-        if useCoarseOnly:
+        if useCoarse:
             #test coarse network
             prod = CoarseBatchProducer(testingFile, cellFilter)
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
             print("test accuracy %g" % acc)
-        elif useDetailedOnly:
+        else:
             #test detailed network
             prod = BatchProducer(testingFile)
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
             print("test accuracy: %g" % acc)
-        else:
-            print("Not implemented", file=sys.stderr)
-            sys.exit(1)
     #running on an image file
     if (runningFile != None):
         #obtain PIL image
@@ -411,7 +403,7 @@ with tf.Session() as sess:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
         ]
         #get results
-        if useCoarseOnly:
+        if useCoarse:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                     if cellFilter != None and cellFilter[i][j] == 1:
@@ -421,20 +413,18 @@ with tf.Session() as sess:
                             x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
                         })
                         p[i][j] = output[0][0]
-        elif useDetailedOnly:
+        else:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                     if cellFilter != None and cellFilter[i][j] == 1:
                         p[i][j] = -1
                     else:
+                        # TODO: use coarse filter
                         output = y.eval(feed_dict={
                             x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
                             p_dropout: 1.0
                         })
                         p[i][j] = output[0][0]
-        else:
-            print("Not implemented", file=sys.stderr)
-            sys.exit(1)
         #write results to image file
         draw = ImageDraw.Draw(image, "RGBA")
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
@@ -463,7 +453,7 @@ with tf.Session() as sess:
     #generating input samples
     if (samplesFile != None):
         NUM_SAMPLES = (20, 20)
-        if useCoarseOnly:
+        if useCoarse:
             prod = CoarseBatchProducer(samplesFile, cellFilter)
         else:
             prod = BatchProducer(samplesFile)
