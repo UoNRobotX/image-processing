@@ -46,24 +46,24 @@
 
 ## Working with the coarse network.
 * Creating and training the coarse network, for 100 steps.
-  `python3 findBuoys.py -c -n -f filterData.txt -t trainingDataCoarse.txt -b 100`
+  `python3 findBuoys.py train trainingDataCoarse.txt -c -n -s 100`
 * Testing the coarse network.
-  `python3 findBuoys.py -c -f filterData.txt -e testingDataCoarse.txt`
+  `python3 findBuoys.py test testingDataCoarse.txt -c`
 * View the results of running the coarse network on an image.
-  `python3 findBuoys.py -c -f filterData.txt -r images/008.jpg`
+  `python3 findBuoys.py run images/008.jpg -c`
    A representation of the results is saved in outputFindBuoys.jpg.
 * Viewing sample coarse network inputs.
-  `python3 findBuoys.py -c -f filterData.txt -s trainingDataCoarse.txt`
+  `python3 findBuoys.py samples trainingDataCoarse.txt -c`
   A representation of the results is saved in samplesFindBuoys.jpg.
 
 ## Working with the whole network.
 * Creating and training the network, for 100 steps.
-  `python3 findBuoys.py -n -f filterData.txt -t trainingData.txt -b 100`
+  `python3 findBuoys.py train trainingData.txt -n -s 100`
 * Testing the network.
-  `python3 findBuoys.py -f filterData.txt -e testingData.txt`
+  `python3 findBuoys.py test testingData.txt`
 * View the results of running the network on an image.
-  `python3 findBuoys.py -f filterData.txt -r images/008.jpg`
+  `python3 findBuoys.py run images/008.jpg`
    A representation of the results is saved in outputFindBuoys.jpg.
 * Viewing sample network inputs.
-  `python3 findBuoys.py -f filterData.txt -s trainingData.txt`
+  `python3 findBuoys.py samples trainingData.txt`
   A representation of the results is saved in samplesFindBuoys.jpg.
