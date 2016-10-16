@@ -206,7 +206,7 @@ class BatchProducer:
     "Produces input values for the detailed network"
     VALUES_PER_IMAGE = 30
     #constructor
-    def __init__(self, dataFile, cellFilter):
+    def __init__(self, dataFile, cellFilter, coarseX, coarseY):
         self.filenames = [] #list of image files
         self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
         self.fileIdx = 0
@@ -214,6 +214,8 @@ class BatchProducer:
         self.data = None
         self.valuesGenerated = 0
         self.unfilteredCells = None
+        self.coarseX = coarseX
+        self.coarseY = coarseY #allows using the coarse network to filter cells
         #read 'dataFile' (should have the same format as output by 'genData.py')
         filenameSet = set()
         boxesDict = dict()
@@ -257,47 +259,60 @@ class BatchProducer:
     def getBatch(self, size):
         inputs = []
         outputs = []
-        for i in range(size):
-            if self.valuesGenerated == self.VALUES_PER_IMAGE:
-                #open next image file
-                self.fileIdx += 1
-                if self.fileIdx+1 > len(self.filenames):
-                    self.fileIdx = 0
-                self.image = Image.open(self.filenames[self.fileIdx])
-                self.image = self.image.resize(
-                    (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                    resample=Image.LANCZOS
-                )
-                self.data = np.array(list(self.image.getdata())).astype(np.float32)
-                self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
-                self.valuesGenerated = 0
-            #randomly select a non-filtered grid cell
-            idx = self.unfilteredCells[
-                math.floor(random.random() * len(self.unfilteredCells))
-            ]
-            rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
-            i = idx % rowSize
-            j = idx // rowSize
-            x = i*INPUT_WIDTH
-            y = j*INPUT_HEIGHT
-            #get an input
-            inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
-            #get an output
-            topLeftX = x*IMG_DOWNSCALE + 15
-            topLeftY = y*IMG_DOWNSCALE + 15
-            bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE - 15
-            bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE - 15
-            hasOverlappingBox = False
-            for box in self.boxes[self.fileIdx]:
-                if (not box[2] < topLeftX and
-                    not box[0] > bottomRightX and
-                    not box[3] < topLeftY and
-                    not box[1] > bottomRightY):
-                    hasOverlappingBox = True
-                    break
-            outputs.append([1, 0] if hasOverlappingBox else [0, 1])
+        potentialInputs = []
+        potentialOutputs = []
+        while size > 0:
+            for i in range(size):
+                if self.valuesGenerated == self.VALUES_PER_IMAGE:
+                    #open next image file
+                    self.fileIdx += 1
+                    if self.fileIdx+1 > len(self.filenames):
+                        self.fileIdx = 0
+                    self.image = Image.open(self.filenames[self.fileIdx])
+                    self.image = self.image.resize(
+                        (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
+                        resample=Image.LANCZOS
+                    )
+                    self.data = np.array(list(self.image.getdata())).astype(np.float32)
+                    self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+                    self.valuesGenerated = 0
+                #randomly select a non-filtered grid cell
+                idx = self.unfilteredCells[
+                    math.floor(random.random() * len(self.unfilteredCells))
+                ]
+                rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
+                i = idx % rowSize
+                j = idx // rowSize
+                x = i*INPUT_WIDTH
+                y = j*INPUT_HEIGHT
+                #get an input
+                potentialInputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+                #get an output
+                topLeftX = x*IMG_DOWNSCALE + 15
+                topLeftY = y*IMG_DOWNSCALE + 15
+                bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE - 15
+                bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE - 15
+                hasOverlappingBox = False
+                for box in self.boxes[self.fileIdx]:
+                    if (not box[2] < topLeftX and
+                        not box[0] > bottomRightX and
+                        not box[3] < topLeftY and
+                        not box[1] > bottomRightY):
+                        hasOverlappingBox = True
+                        break
+                potentialOutputs.append([1, 0] if hasOverlappingBox else [0, 1])
+                #update
+                self.valuesGenerated += 1
+            #filter using coarse network
+            out = self.coarseY.eval(feed_dict={self.coarseX: np.array(potentialInputs)})
+            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < 0.5]
+            inputs  += [potentialInputs[i] for i in unfilteredIndices]
+            outputs += [potentialOutputs[i] for i in unfilteredIndices]
             #update
-            self.valuesGenerated += 1
+            size -= len(unfilteredIndices)
+            print(size)
+            potentialInputs = []
+            potentialOutputs = []
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 #create computation graph
@@ -395,7 +410,7 @@ with tf.Session() as sess:
                     print("step %d, accuracy %g" % (step, acc))
         else:
             #train detailed network
-            prod = BatchProducer(trainingFile, cellFilter)
+            prod = BatchProducer(trainingFile, cellFilter, x, cy)
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
@@ -412,7 +427,7 @@ with tf.Session() as sess:
             print("test accuracy %g" % acc)
         else:
             #test detailed network
-            prod = BatchProducer(testingFile, cellFilter)
+            prod = BatchProducer(testingFile, cellFilter, x, cy)
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
             print("test accuracy: %g" % acc)
@@ -438,7 +453,12 @@ with tf.Session() as sess:
                         p[i][j] = -1
                     else:
                         out = cy.eval(feed_dict={
-                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
+                            x: array[
+                                :,
+                                INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
+                                INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
+                                :
+                            ]
                         })
                         p[i][j] = out[0][0]
         else:
@@ -496,7 +516,7 @@ with tf.Session() as sess:
         if useCoarse:
             prod = CoarseBatchProducer(samplesFile, cellFilter)
         else:
-            prod = BatchProducer(samplesFile, cellFilter)
+            prod = BatchProducer(samplesFile, cellFilter, x, cy)
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
         draw = ImageDraw.Draw(image, "RGBA")
         #get samples
