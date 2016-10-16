@@ -6,7 +6,7 @@ import tensorflow as tf
 usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] [-r img1] [-s df1]
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist, and nothing is done.
-    If neither -c nor -d is given, the default is -c.
+    If neither -c nor -d is given, the default is -d.
 
     Options:
         -c
@@ -36,7 +36,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] 
 """
 
 #process command line arguments
-useCoarse    = True
+useCoarse    = False
 filterFile   = None
 trainingFile = None
 testingFile  = None
@@ -245,7 +245,7 @@ class BatchProducer:
     def getBatch(self, size):
         inputs = []
         outputs = []
-        while size > 0:
+        for i in range(size):
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 #open next image file
                 self.fileIdx += 1
@@ -280,7 +280,6 @@ class BatchProducer:
             outputs.append([1, 0] if hasOverlappingBox else [0, 1])
             #update
             self.valuesGenerated += 1
-            size -= 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 #create computation graph
@@ -420,22 +419,27 @@ with tf.Session() as sess:
                     if cellFilter != None and cellFilter[i][j] == 1:
                         p[i][j] = -1
                     else:
-                        output = cy.eval(feed_dict={
+                        out = cy.eval(feed_dict={
                             x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
                         })
-                        p[i][j] = output[0][0]
+                        p[i][j] = out[0][0]
         else:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                     if cellFilter != None and cellFilter[i][j] == 1:
-                        p[i][j] = -1
+                        p[i][j] = -2
                     else:
-                        # TODO: use coarse filter
-                        output = y.eval(feed_dict={
-                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
-                            p_dropout: 1.0
+                        coarseOut = cy.eval(feed_dict={
+                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
                         })
-                        p[i][j] = output[0][0]
+                        if coarseOut[0][0] > 0.5:
+                            p[i][j] = -1
+                        else:
+                            out = y.eval(feed_dict={
+                                x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
+                                p_dropout: 1.0
+                            })
+                            p[i][j] = out[0][0]
         #write results to image file
         draw = ImageDraw.Draw(image, "RGBA")
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
@@ -446,14 +450,21 @@ with tf.Session() as sess:
                         INPUT_HEIGHT*IMG_DOWNSCALE*i + int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j])),
                         INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
                         INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ], fill=(0,255,0,64))
+                    ], fill=(0,255,0,96))
+                elif p[i][j] == -1:
+                    draw.rectangle([
+                        INPUT_WIDTH*IMG_DOWNSCALE*j,
+                        INPUT_HEIGHT*IMG_DOWNSCALE*i,
+                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                    ], fill=(196,128,0,96))
                 else:
                     draw.rectangle([
                         INPUT_WIDTH*IMG_DOWNSCALE*j,
                         INPUT_HEIGHT*IMG_DOWNSCALE*i,
                         INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
                         INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ], fill=(196,0,0,64))
+                    ], fill=(196,0,0,96))
                 draw.rectangle([
                     INPUT_WIDTH*IMG_DOWNSCALE*j,
                     INPUT_HEIGHT*IMG_DOWNSCALE*i,
