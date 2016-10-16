@@ -1,9 +1,9 @@
-import sys, os, math, random
+import sys, os, math, random, time
 import numpy as np
 from PIL import Image, ImageDraw
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] [-r img1] [-s df1]
+usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f f1] [-t f1] [-e f1] [-r i1] [-s f1] [-b n1]
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist, and nothing is done.
     If neither -c nor -d is given, the default is -d.
@@ -23,26 +23,29 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-cdn] [-f df1] [-t df1] [-e df1] 
             With -s, generate inputs to the detailed network, using the coarse network to filter input.
         -n
             Re-initialise values for the coarse/detailed network.
-        -f df1
-            Ignore grid cells specified by a filter from file 'df1'.
-        -t df1
-            Train the coarse/detailed network, using training data from file 'df1'.
-        -e df1
-            Test coarse/detailed networks, using testing data from file 'df1'.
+        -f f1
+            Ignore grid cells specified by a filter from file 'f1'.
+        -t f1
+            Train the coarse/detailed network, using training data from file 'f1'.
+        -e f1
+            Test coarse/detailed networks, using testing data from file 'f1'.
         -r img1
             Run coarse/detailed networks using input image 'img1'.
-        -s df1
-            Generate input samples for the coarse/detailed network, using data from file 'df1'.
+        -s f1
+            Generate input samples for the coarse/detailed network, using data from file 'f1'.
+        -b n1
+            With -t, specifies the number of training iterations.
 """
 
 #process command line arguments
-useCoarse    = False
-filterFile   = None
-trainingFile = None
-testingFile  = None
-runningFile  = None
-samplesFile  = None
-reinitialise = False
+useCoarse        = False
+filterFile       = None
+trainingFile     = None
+testingFile      = None
+runningFile      = None
+samplesFile      = None
+reinitialise     = False
+numTrainingSteps = 100
 i = 1
 while i < len(sys.argv):
     arg = sys.argv[i]
@@ -87,6 +90,16 @@ while i < len(sys.argv):
             sys.exit(1)
     elif arg == "-n":
         reinitialise = True
+    elif arg == "-b":
+        i += 1
+        if i < len(sys.argv):
+            numTrainingSteps = int(sys.argv[i])
+            if numTrainingSteps <= 0:
+                print("Argument to -b must be positive")
+                sys.exit(1)
+        else:
+            print("No argument for -b", file=sys.stderr)
+            sys.exit(1)
     else:
         print(usage)
         sys.exit(0)
@@ -113,10 +126,10 @@ INPUT_CHANNELS       = 3
 SAVE_FILE            = "modelData/model.ckpt"   #save/load network values to/from here
 RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"  #with -r, a representation of the output is saved here
 SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg" #with -s, a representation of the output is saved here
-TRAINING_STEPS       = 100 #with -t, the number of training iterations
-TRAINING_BATCH_SIZE  = 50  #with -t, the number of inputs per training iteration
-TRAINING_LOG_PERIOD  = 50  #with -t, informative lines are printed after this many training iterations
-TESTING_BATCH_SIZE   = 50  #with -e, the number of inputs used for testing
+TRAINING_STEPS       = numTrainingSteps
+TRAINING_BATCH_SIZE  = 50 #with -t, the number of inputs per training step
+TRAINING_LOG_PERIOD  = 50 #with -t, informative lines are printed after this many training steps
+TESTING_BATCH_SIZE   = 50 #with -e, the number of inputs used for testing
 
 #classes for producing input values
 class CoarseBatchProducer:
@@ -402,35 +415,39 @@ with tf.Session() as sess:
         if useCoarse:
             #train coarse network
             prod = CoarseBatchProducer(trainingFile, cellFilter)
+            startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 ctrain.run(feed_dict={x: inputs, y_: outputs})
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
-                    print("step %d, accuracy %g" % (step, acc))
+                    print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
         else:
             #train detailed network
             prod = BatchProducer(trainingFile, cellFilter, x, cy)
+            startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
-                    print("step %d, accuracy %g" % (step, acc))
+                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
     #testing
     if (testingFile != None):
         if useCoarse:
             #test coarse network
             prod = CoarseBatchProducer(testingFile, cellFilter)
+            startTime = time.time()
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
-            print("test accuracy %g" % acc)
+            print("%7.2f secs - test accuracy %g" % (time.time() - startTime, acc))
         else:
             #test detailed network
             prod = BatchProducer(testingFile, cellFilter, x, cy)
+            startTime = time.time()
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
-            print("test accuracy: %g" % acc)
+            print("%7.2f secs - test accuracy %g" % (time.time() - startTime, acc))
     #running on an image file
     if (runningFile != None):
         #obtain PIL image
@@ -446,6 +463,7 @@ with tf.Session() as sess:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
         ]
         #get results
+        startTime = time.time()
         if useCoarse:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
@@ -510,6 +528,8 @@ with tf.Session() as sess:
                     INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
                 ], outline=(0,0,0,255))
         image.save(RUN_OUTPUT_IMAGE)
+        #output time taken
+        print("%7.2f secs - output written to %s" % (time.time() - startTime, RUN_OUTPUT_IMAGE))
     #generating input samples
     if (samplesFile != None):
         NUM_SAMPLES = (20, 20)
@@ -520,6 +540,7 @@ with tf.Session() as sess:
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
         draw = ImageDraw.Draw(image, "RGBA")
         #get samples
+        startTime = time.time()
         for i in range(NUM_SAMPLES[0]):
             for j in range(NUM_SAMPLES[1]):
                 inputs, outputs = prod.getBatch(1)
@@ -539,5 +560,7 @@ with tf.Session() as sess:
                         INPUT_HEIGHT*(j+1),
                     ], fill=(0,255,0,64))
         image.save(SAMPLES_OUTPUT_IMAGE)
+        #output time taken
+        print("%7.2f secs - output written to %s" % (time.time() - startTime, SAMPLES_OUTPUT_IMAGE))
     #saving
     saver.save(sess, SAVE_FILE)

@@ -45,8 +45,8 @@
    `python3 showMarkedImages.py -b trainingData.txt`
 
 ## Working with the coarse network.
-* Creating and training the coarse network.
-  `python3 findBuoys.py -c -n -f filterData.txt -t trainingDataCoarse.txt`
+* Creating and training the coarse network, for 100 steps.
+  `python3 findBuoys.py -c -n -f filterData.txt -t trainingDataCoarse.txt -b 100`
 * Testing the coarse network.
   `python3 findBuoys.py -c -f filterData.txt -e testingDataCoarse.txt`
 * View the results of running the coarse network on an image.
@@ -57,8 +57,8 @@
   A representation of the results is saved in samplesFindBuoys.jpg.
 
 ## Working with the whole network.
-* Creating and training the network.
-  `python3 findBuoys.py -n -f filterData.txt -t trainingData.txt`
+* Creating and training the network, for 100 steps.
+  `python3 findBuoys.py -n -f filterData.txt -t trainingData.txt -b 100`
 * Testing the network.
   `python3 findBuoys.py -f filterData.txt -e testingData.txt`
 * View the results of running the network on an image.
