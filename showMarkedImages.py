@@ -110,11 +110,13 @@ if len(filenames) == 0:
 window = tkinter.Tk()
 window.title(filenames[0])
 image = Image.open(filenames[0])
-draw = ImageDraw.Draw(image)
-canvas = tkinter.Canvas(window, width=image.size[0], height=image.size[1])
-canvas.pack()
+draw = ImageDraw.Draw(image, "RGBA")
+canvasWidth = image.size[0]
+canvasHeight = image.size[1]
+canvas = tkinter.Canvas(window, width=canvasWidth, height=canvasHeight)
+canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 imageTk = ImageTk.PhotoImage(image)
-canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
+canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
 
 #variables
 IMG_DOWNSCALE = 2
@@ -156,9 +158,23 @@ def drawMarks(mode):
 #draw boxes/cells for current image file
 drawMarks(mode)
 
+#tag canvas items
+canvas.addtag_all("tag")
+
 #handler functions
+def resizeCallback(event):
+    global canvasWidth, canvasHeight, imageTk, canvasImage
+    wscale = float(event.width)/canvasWidth
+    hscale = float(event.height)/canvasHeight
+    canvasWidth = event.width
+    canvasHeight = event.height
+    canvas.config(width=canvasWidth, height=canvasHeight)
+    canvas.scale("tag", 0, 0, wscale, hscale)
+    canvas.delete(canvasImage)
+    imageTk = ImageTk.PhotoImage(image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS))
+    canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
 def returnCallback(event):
-    global fileIdx, image, draw, imageTk
+    global fileIdx, image, draw, imageTk, canvasImage
     #save file if requested
     if saveFiles:
         image.save(re.sub(r"(\.[^.]*)?$", r"_out\1", filenames[fileIdx]))
@@ -170,18 +186,25 @@ def returnCallback(event):
         #load new image
         window.title(filenames[fileIdx])
         image = Image.open(filenames[fileIdx])
-        draw = ImageDraw.Draw(image)
-        canvas.config(width=image.size[0], height=image.size[1])
-        canvas.pack()
-        imageTk = ImageTk.PhotoImage(image)
-        canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
+        draw = ImageDraw.Draw(image, "RGBA")
+        #draw marks, and scale them
         drawMarks(mode)
+        canvas.addtag_all("tag")
+        wscale = float(canvasWidth)/image.size[0]
+        hscale = float(canvasHeight)/image.size[1]
+        canvas.scale("tag", 0, 0, wscale, hscale)
+        #add scaled image
+        imageTk = ImageTk.PhotoImage(
+            image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+        )
+        canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
     else:
         sys.exit(0)
 def escapeCallback(event):
     sys.exit(0)
 
 #bind handlers
+canvas.bind("<Configure>", resizeCallback)
 window.bind("<Return>", returnCallback)
 window.bind("<Escape>", escapeCallback)
 
