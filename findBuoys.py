@@ -92,7 +92,7 @@ while i < len(sys.argv):
         sys.exit(0)
     i += 1
 
-#read 'filterFile' if given (should have the same format as output by 'markImages.py' with -f)
+#read 'filterFile' if given
 cellFilter = None #has the form [[flag1, ...], ...], specifying filtered cells
 if filterFile != None:
     cellFilter = []
@@ -121,7 +121,7 @@ TESTING_BATCH_SIZE   = 50  #with -e, the number of inputs used for testing
 #classes for producing input values
 class CoarseBatchProducer:
     "Produces input values for the coarse network"
-    VALUES_PER_IMAGE = 50
+    VALUES_PER_IMAGE = 30
     #constructor
     def __init__(self, dataFile, cellFilter):
         self.filenames = [] #list of image files
@@ -130,7 +130,7 @@ class CoarseBatchProducer:
         self.image = None
         self.data = None
         self.valuesGenerated = 0
-        self.cellFilter = cellFilter
+        self.unfilteredCells = None
         #read 'dataFile' (should have the same format as output by 'markImages.py' with -w)
         cellsDict = dict()
         filename = None
@@ -155,6 +155,17 @@ class CoarseBatchProducer:
         #obtain numpy array
         self.data = np.array(list(self.image.getdata())).astype(np.float32)
         self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+        #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
+        rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
+        colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
+        if cellFilter != None:
+            self.unfilteredCells = []
+            for row in range(len(cellFilter)):
+                for col in range(len(cellFilter[row])):
+                    if cellFilter[row][col] == 0:
+                        self.unfilteredCells.append(col+row*rowSize)
+        else:
+            self.unfilteredCells = range(colSize * rowSize)
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
@@ -175,13 +186,13 @@ class CoarseBatchProducer:
                 self.valuesGenerated = 0
             #get an input and output
             while True:
-                #randomly select a grid cell
-                i = math.floor(random.random()*((IMG_SCALED_WIDTH  - 1) // INPUT_WIDTH))
-                j = math.floor(random.random()*((IMG_SCALED_HEIGHT - 1) // INPUT_HEIGHT))
-                #skip filtered cells
-                     # TODO: this can cause an infinite loop if all cells are filtered
-                if self.cellFilter != None and self.cellFilter[j][i] == 1:
-                    continue
+                #randomly select a non-filtered grid cell
+                idx = self.unfilteredCells[
+                    math.floor(random.random() * len(self.unfilteredCells))
+                ]
+                rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
+                i = idx % rowSize
+                j = idx // rowSize
                 #get an input
                 x = i*INPUT_WIDTH
                 y = j*INPUT_HEIGHT
