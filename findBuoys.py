@@ -219,14 +219,16 @@ class BatchProducer:
         #read 'dataFile' (should have the same format as output by 'genData.py')
         filenameSet = set()
         boxesDict = dict()
+        filename = None
         with open(dataFile) as file:
             for line in file:
-                record = line.strip().split(",")
-                filenameSet.add(record[0])
-                if not record[0] in boxesDict:
-                    boxesDict[record[0]] = [[int(field) for field in record[1:5]]]
+                if line[0] != " ":
+                    filename = line.strip()
+                    filenameSet.add(filename)
+                    if not filename in boxesDict:
+                        boxesDict[filename] = []
                 else:
-                    boxesDict[record[0]].append([int(field) for field in record[1:5]])
+                    boxesDict[filename].append([int(c) for c in line.strip().split(",")])
         self.filenames = list(filenameSet)
         random.shuffle(self.filenames)
         self.boxes = [boxesDict[name] for name in self.filenames]
@@ -309,7 +311,6 @@ class BatchProducer:
             outputs += [potentialOutputs[i] for i in unfilteredIndices]
             #update
             size -= len(unfilteredIndices)
-            print(size)
             potentialInputs = []
             potentialOutputs = []
         return np.array(inputs), np.array(outputs).astype(np.float32)
@@ -404,7 +405,7 @@ with tf.Session() as sess:
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 ctrain.run(feed_dict={x: inputs, y_: outputs})
-                if step % TRAINING_LOG_PERIOD == 0:
+                if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
                     print("step %d, accuracy %g" % (step, acc))
         else:
@@ -413,7 +414,7 @@ with tf.Session() as sess:
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
                 train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
-                if step % TRAINING_LOG_PERIOD == 0:
+                if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
                     print("step %d, accuracy %g" % (step, acc))
     #testing
@@ -449,7 +450,7 @@ with tf.Session() as sess:
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                     if cellFilter != None and cellFilter[i][j] == 1:
-                        p[i][j] = -1
+                        p[i][j] = -2
                     else:
                         out = cy.eval(feed_dict={
                             x: array[

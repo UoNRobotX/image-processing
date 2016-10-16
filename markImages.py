@@ -17,7 +17,10 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d dir1]
     Options:
         -b
             The user marks bounding boxes around dark buoys by clicking and dragging.
-            Output lines have this format: imageFile,topLeftX,topLeftY,bottomRightX,bottomRightY
+            The output contains lines holding image filenames.
+            Output lines have one of these formats:
+                Each such line is followed by indented lines, each specifying a bounding box.
+                    A line ' 1,2,3,4' specifies a box with top-left at 1,2 and bottom-right at 3,4.
         -f
             The user marks grid cells that should always be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether a cell is marked.
@@ -120,12 +123,13 @@ def setupMarkBoxHandlers():
                 sel[0][0], sel[0][1], sel[1][0], sel[1][1]
             )
         )
-        print("%s,%d,%d,%d,%d" % (filenames[filenameIdx], sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
+        print(" %d,%d,%d,%d" % (sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
     def returnCallback(event):
         global filenameIdx, image, imageTk, boxes
         #move to next file, or exit
         filenameIdx += 1
         if filenameIdx < len(filenames):
+            print(filenames[filenameIdx])
             window.title(filenames[filenameIdx]) #rename window
             canvas.delete(tkinter.ALL) #remove image and boxes
             boxes = []
@@ -139,6 +143,7 @@ def setupMarkBoxHandlers():
             sys.exit(0)
     def escapeCallback(event):
         sys.exit(0)
+    print(filenames[filenameIdx])
     canvas.bind("<Button-1>", clickCallback)
     canvas.bind("<B1-Motion>", moveCallback)
     canvas.bind("<ButtonRelease-1>", releaseCallback)

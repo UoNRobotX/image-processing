@@ -47,6 +47,9 @@ while i < len(sys.argv):
         i += 1
         if i < len(sys.argv):
             dataFile = sys.argv[i]
+        i += 1
+        if i < len(sys.argv):
+            imageOrDir = sys.argv[i]
     elif arg == "-w":
         mode = MODE_WATER
         i += 1
@@ -73,19 +76,11 @@ with open(dataFile) as file:
         filenameSet = set()
         boxDict = dict()
         for line in file:
-            record = line.strip().split(",")
-            if len(record) < 5:
-                print("Warning: a line has too few fields", file=sys.stderr)
-                continue
-            filenameSet.add(record[0])
-            box = [int(record[1]), int(record[2]), int(record[3]), int(record[4])]
-            if not record[0] in boxDict:
-                boxDict[record[0]] = [box]
+            if line[0] != " ":
+                filenames.append(line.strip())
+                records.append([])
             else:
-                boxDict[record[0]].append(box)
-        filenames = list(filenameSet)
-        filenames.sort()
-        records = [boxDict[name] for name in filenames]
+                records[-1].append([int(c) for c in line.strip().split(",")])
     elif mode == MODE_FILTER:
         if os.path.isfile(imageOrDir):
             filenames = [imageOrDir]
