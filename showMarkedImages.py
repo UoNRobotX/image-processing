@@ -64,7 +64,7 @@ while i < len(sys.argv):
 if mode == None:
     print("At least one of -f, -w, or -b should be given", file=sys.stderr)
     sys.exit(1)
-if dataFile == None or imageOrDir == None:
+if dataFile == None or mode == MODE_FILTER and imageOrDir == None:
     print(usage, file=sys.stderr)
     sys.exit(1)
 

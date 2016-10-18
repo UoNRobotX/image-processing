@@ -3,12 +3,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ train|test|run|samples file1 [file2] [-cdn] [-s n1]
+usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] [-o img1]
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist.
     If neither -c nor -d is given, -d is assumed.
 
-    Actions:
+    'cmd1' specifies an action:
         train file1 [file2]
             Train the coarse/detailed network, using training data from 'file1'.
             The filter specified by 'file2' is used (if empty, no filter is used).
@@ -42,18 +42,22 @@ usage = "Usage: python3 " + sys.argv[0] + """ train|test|run|samples file1 [file
         -s n1
             With 'train', specifies the number of training steps.
             With 'test', specifies the number of test values.
+        -o img1
+            With 'run' or 'sampels', specifies the image file to create.
+            The defaults are 'output.jpg' and 'samples.jpg'.
 """
 
 #process command line arguments
-MODE_TRAIN       = 0
-MODE_TEST        = 1
-MODE_RUN         = 2
-MODE_SAMPLES     = 3
-mode             = None
-useCoarseOnly    = False
-dataFile         = None
-filterFile       = None
-reinitialise     = False
+MODE_TRAIN    = 0
+MODE_TEST     = 1
+MODE_RUN      = 2
+MODE_SAMPLES  = 3
+mode          = None
+useCoarseOnly = False
+dataFile      = None
+filterFile    = None
+outputImg     = None
+reinitialise  = False
 numSteps = 100
 i = 1
 while i < len(sys.argv):
@@ -73,6 +77,13 @@ while i < len(sys.argv):
                 sys.exit(1)
         else:
             print("No argument for -s", file=sys.stderr)
+            sys.exit(1)
+    elif arg == "-o":
+        i += 1
+        if i < len(sys.argv):
+            outputImg = sys.argv[i]
+        else:
+            print("No argument for -o", file=sys.stderr)
             sys.exit(1)
     else:
         if mode == None:
@@ -115,8 +126,8 @@ INPUT_HEIGHT         = 32
 INPUT_WIDTH          = 32
 INPUT_CHANNELS       = 3
 SAVE_FILE            = "modelData/model.ckpt" #save/load network values to/from here
-RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"  #with -r, a representation of the output is saved here
-SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg" #with -s, a representation of the output is saved here
+RUN_OUTPUT_IMAGE     = outputImg or "output.jpg"  #output image for 'run' action
+SAMPLES_OUTPUT_IMAGE = outputImg or "samples.jpg" #output image for 'sample' action
 TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
