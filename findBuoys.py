@@ -41,6 +41,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ train|test|run|samples file1 [file
             Re-initialise values for the coarse/detailed network.
         -s n1
             With 'train', specifies the number of training steps.
+            With 'test', specifies the number of test values.
 """
 
 #process command line arguments
@@ -53,7 +54,7 @@ useCoarseOnly    = False
 dataFile         = None
 filterFile       = None
 reinitialise     = False
-numTrainingSteps = 100
+numSteps = 100
 i = 1
 while i < len(sys.argv):
     arg = sys.argv[i]
@@ -66,8 +67,8 @@ while i < len(sys.argv):
     elif arg == "-s":
         i += 1
         if i < len(sys.argv):
-            numTrainingSteps = int(sys.argv[i])
-            if numTrainingSteps <= 0:
+            numSteps = int(sys.argv[i])
+            if numSteps <= 0:
                 print("Argument to -s must be positive")
                 sys.exit(1)
         else:
@@ -116,10 +117,10 @@ INPUT_CHANNELS       = 3
 SAVE_FILE            = "modelData/model.ckpt" #save/load network values to/from here
 RUN_OUTPUT_IMAGE     = "outputFindBuoys.jpg"  #with -r, a representation of the output is saved here
 SAMPLES_OUTPUT_IMAGE = "samplesFindBuoys.jpg" #with -s, a representation of the output is saved here
-TRAINING_STEPS       = numTrainingSteps
-TRAINING_BATCH_SIZE  = 50 #with -t, the number of inputs per training step
-TRAINING_LOG_PERIOD  = 50 #with -t, informative lines are printed after this many training steps
-TESTING_BATCH_SIZE   = 50 #with -e, the number of inputs used for testing
+TRAINING_STEPS       = numSteps
+TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
+TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
+TESTING_BATCH_SIZE   = numSteps #the number of inputs used for testing
 
 #obtain filter
 cellFilter = None #has the form [[flag1, ...], ...], specifying filtered cells
