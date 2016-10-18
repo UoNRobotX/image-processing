@@ -64,8 +64,9 @@ while i < len(sys.argv):
 if mode == None:
     print("At least one of -f, -w, or -b should be given", file=sys.stderr)
     sys.exit(1)
-if dataFile == None:
+if dataFile == None or imageOrDir == None:
     print(usage, file=sys.stderr)
+    sys.exit(1)
 
 #read data file
 filenames = [] #image files to display
@@ -170,8 +171,8 @@ def returnCallback(event):
     #move to next image, or exit
     fileIdx += 1
     if fileIdx < len(filenames):
-        #remove image and boxes
-        canvas.delete(tkinter.ALL)
+        #remove image
+        canvas.delete(canvasImage)
         #load new image
         window.title(filenames[fileIdx])
         image = Image.open(filenames[fileIdx])

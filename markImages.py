@@ -89,10 +89,12 @@ if len(filenames) == 0:
 window = tkinter.Tk()
 window.title(filenames[filenameIdx])
 image = Image.open(filenames[filenameIdx])
-canvas = tkinter.Canvas(window, width=image.size[0], height=image.size[1])
-canvas.pack()
+canvasWidth = image.size[0]
+canvasHeight = image.size[1]
+canvas = tkinter.Canvas(window, width=canvasWidth, height=canvasHeight)
+canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
 imageTk = ImageTk.PhotoImage(image)
-canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
+canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
 
 #variables
 IMG_DOWNSCALE = 2
@@ -101,11 +103,25 @@ INPUT_WIDTH   = 32*IMG_DOWNSCALE
 sel   = [None, None] #has the form [[x,y], [x,y]], and holds the corners of a box being created
 box   = None         #holds a rectangle shown while the mouse is being dragegd
 boxes = []           #holds created boxes
-cells = []           #cells[i][j] has this form: [mark, markBoxOrNone], where 'mark' is 0 or 1
+cells = []           #cells[i][j] is a canvas box ID or None, indicating if the cell is marked
 mouseDownCell = None #has the form [i,j], specifying the last cell the mouse was in while held down
 
 #handler setup functions
 def setupMarkBoxHandlers():
+    def resizeCallback(event):
+        global canvasWidth, canvasHeight, imageTk, canvasImage
+        wscale = event.width/canvasWidth
+        hscale = event.height/canvasHeight
+        canvasWidth = event.width
+        canvasHeight = event.height
+        canvas.config(width=canvasWidth, height=canvasHeight)
+        canvas.scale("all", 0, 0, wscale, hscale)
+        canvas.delete(canvasImage)
+        imageTk = ImageTk.PhotoImage(
+            image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+        )
+        canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
+        canvas.tag_lower(canvasImage) #move image to back
     def clickCallback(event):
         sel[0] = [event.x, event.y]
     def moveCallback(event):
@@ -123,6 +139,13 @@ def setupMarkBoxHandlers():
                 sel[0][0], sel[0][1], sel[1][0], sel[1][1]
             )
         )
+        #convert to non-scaled image coordinates
+        wscale = image.size[0]/canvasWidth
+        hscale = image.size[1]/canvasHeight
+        sel[0][0] = int(sel[0][0] * wscale)
+        sel[0][1] = int(sel[0][1] * hscale)
+        sel[1][0] = int(sel[1][0] * wscale)
+        sel[1][1] = int(sel[1][1] * hscale)
         print(" %d,%d,%d,%d" % (sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
     def returnCallback(event):
         global filenameIdx, image, imageTk, boxes
@@ -135,15 +158,16 @@ def setupMarkBoxHandlers():
             boxes = []
             #load new image
             image = Image.open(filenames[filenameIdx])
-            canvas.config(width=image.size[0], height=image.size[1])
-            canvas.pack()
-            imageTk = ImageTk.PhotoImage(image)
-            canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
+            imageTk = ImageTk.PhotoImage(
+                image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+            )
+            canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
         else:
             sys.exit(0)
     def escapeCallback(event):
         sys.exit(0)
     print(filenames[filenameIdx])
+    canvas.bind("<Configure>", resizeCallback)
     canvas.bind("<Button-1>", clickCallback)
     canvas.bind("<B1-Motion>", moveCallback)
     canvas.bind("<ButtonRelease-1>", releaseCallback)
@@ -151,122 +175,111 @@ def setupMarkBoxHandlers():
     window.bind("<Escape>", escapeCallback)
 def setupMarkCellHandlers(markFilter):
     #helper functions
-    def initCells(): #create new cells, unmarked, with grid boxes
-        global cells
-        for i in range(image.size[0]//INPUT_WIDTH):
-            cells.append([])
-            for j in range(image.size[1]//INPUT_HEIGHT):
-                cells[i].append([0, None])
-                boxes.append(
-                    canvas.create_rectangle(
-                        i*INPUT_WIDTH,
-                        j*INPUT_HEIGHT,
-                        i*INPUT_WIDTH+INPUT_WIDTH-1,
-                        j*INPUT_HEIGHT+INPUT_HEIGHT-1
-                    )
-                )
     def toggleCell(i, j): #toggle marked-ness of cell i-j
         global cells
-        if cells[i][j][0] == 1:
-            canvas.delete(cells[i][j][1])
-            cells[i][j] = [0, None]
+        if cells[i][j] != None:
+            canvas.delete(cells[i][j])
+            cells[i][j] = None
         else:
-            cells[i][j] = [
-                1,
-                canvas.create_rectangle(
-                    i*INPUT_WIDTH,
-                    j*INPUT_HEIGHT,
-                    i*INPUT_WIDTH+INPUT_WIDTH-1,
-                    j*INPUT_HEIGHT+INPUT_HEIGHT-1,
-                    fill="green",
-                    stipple="gray50"
-                )
-            ]
+            wscale = canvasWidth/image.size[0]
+            hscale = canvasHeight/image.size[1]
+            cells[i][j] = canvas.create_rectangle(
+                i * INPUT_WIDTH  * wscale,
+                j * INPUT_HEIGHT * hscale,
+                (i + 1) * INPUT_WIDTH  * wscale,
+                (j + 1) * INPUT_HEIGHT * hscale,
+                fill="green",
+                stipple="gray50"
+            )
     #handlers
+    def resizeCallback(event):
+        global canvasWidth, canvasHeight, imageTk, canvasImage
+        wscale = event.width/canvasWidth
+        hscale = event.height/canvasHeight
+        canvasWidth = event.width
+        canvasHeight = event.height
+        canvas.config(width=canvasWidth, height=canvasHeight)
+        canvas.scale("all", 0, 0, wscale, hscale)
+        canvas.delete(canvasImage)
+        imageTk = ImageTk.PhotoImage(
+            image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+        )
+        canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
+        canvas.tag_lower(canvasImage) #move image to back
     def clickCallback(event):
         global mouseDownCell
-        i = event.x//INPUT_WIDTH
-        j = event.y//INPUT_HEIGHT
+        wscale = image.size[0]/canvasWidth
+        hscale = image.size[1]/canvasHeight
+        i = int(event.x * wscale) // INPUT_WIDTH
+        j = int(event.y * hscale) // INPUT_HEIGHT
         mouseDownCell = [i, j]
         toggleCell(i,j)
     def moveCallback(event):
         global mouseDownCell
-        i = event.x//INPUT_WIDTH
-        j = event.y//INPUT_HEIGHT
+        #do nothing if mouse is outside window
+        if event.x < 0 or event.x > canvasWidth-1 or event.y < 0 or event.y > canvasHeight-1:
+            return
+        wscale = image.size[0]/canvasWidth
+        hscale = image.size[1]/canvasHeight
+        i = int(event.x * wscale) // INPUT_WIDTH
+        j = int(event.y * hscale) // INPUT_HEIGHT
         if i != mouseDownCell[0] or j != mouseDownCell[1]:
             mouseDownCell = [i, j]
             toggleCell(i,j)
     def markFilterReturnCallback(event):
-        global filenameIdx, image, imageTk, boxes, cells
+        global filenameIdx, image, imageTk, canvasImage, boxes, cells
         #move to next file, or exit
         filenameIdx += 1
         if filenameIdx < len(filenames):
             window.title(filenames[filenameIdx]) #rename window
-            canvas.delete(tkinter.ALL) #remove grid and boxes
-            boxes = []
             #load new image
+            canvas.delete(canvasImage)
             image = Image.open(filenames[filenameIdx])
-            canvas.config(width=image.size[0], height=image.size[1])
-            canvas.pack()
-            imageTk = ImageTk.PhotoImage(image)
-            canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
-            #redraw grid and boxes
-            for i in range(image.size[0]//INPUT_WIDTH):
-                for j in range(image.size[1]//INPUT_HEIGHT):
-                    boxes.append(
-                        canvas.create_rectangle(
-                            i*INPUT_WIDTH,
-                            j*INPUT_HEIGHT,
-                            i*INPUT_WIDTH+INPUT_WIDTH-1,
-                            j*INPUT_HEIGHT+INPUT_HEIGHT-1
-                        )
-                    )
-                    if cells[i][j][0]:
-                        cells[i][j][1] = canvas.create_rectangle(
-                            i*INPUT_WIDTH,
-                            j*INPUT_HEIGHT,
-                            i*INPUT_WIDTH+INPUT_WIDTH-1,
-                            j*INPUT_HEIGHT+INPUT_HEIGHT-1,
-                            fill="green",
-                            stipple="gray50"
-                        )
+            imageTk = ImageTk.PhotoImage(
+                image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+            )
+            canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
+            canvas.tag_lower(canvasImage) #move image to back
         else:
             #output filter info
             for row in range(len(cells[0])):
                 for col in range(len(cells)):
-                    print(cells[col][row][0], end="")
+                    print("0" if cells[col][row] == None else "1", end="")
                 print()
             sys.exit(0)
     def markWaterReturnCallback(event):
-        global filenameIdx, image, imageTk, boxes, cells
+        global filenameIdx, image, imageTk, canvasImage, boxes, cells
         #output info
         print(filenames[filenameIdx])
         for row in range(len(cells[0])):
             print(" ", end="")
             for col in range(len(cells)):
-                print(cells[col][row][0], end="")
+                print("0" if cells[col][row] == None else "1", end="")
             print()
         #move to next file, or exit
         filenameIdx += 1
         if filenameIdx < len(filenames):
             window.title(filenames[filenameIdx]) #rename window
-            canvas.delete(tkinter.ALL) #remove grid and boxes
-            cells = []
-            boxes = []
+            #remove colored boxes
+            for i in range(len(cells)):
+                for j in range(len(cells[i])):
+                    canvas.delete(cells[i][j])
+                    cells[i][j] = None
             #load new image
+            canvas.delete(canvasImage)
             image = Image.open(filenames[filenameIdx])
-            canvas.config(width=image.size[0], height=image.size[1])
-            canvas.pack()
-            imageTk = ImageTk.PhotoImage(image)
-            canvas.create_image(image.size[0]//2, image.size[1]//2, image=imageTk)
-            initCells()
+            imageTk = ImageTk.PhotoImage(
+                image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
+            )
+            canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
+            canvas.tag_lower(canvasImage) #move image to back
         else:
             sys.exit(0)
     def markFilterEscapeCallback(event):
         #output filter info
         for row in range(len(cells[0])):
             for col in range(len(cells)):
-                print(cells[col][row][0], end="")
+                print("0" if cells[col][row] == None else "1", end="")
             print()
         sys.exit(0)
     def markWaterEscapeCallback(event):
@@ -275,10 +288,11 @@ def setupMarkCellHandlers(markFilter):
         for row in range(len(cells[0])):
             print(" ", end="")
             for col in range(len(cells)):
-                print(cells[col][row][0], end="")
+                print("0" if cells[col][row] == None else "1", end="")
             print()
         sys.exit(0)
-    initCells()
+    #set handlers
+    canvas.bind("<Configure>", resizeCallback)
     canvas.bind("<Button-1>", clickCallback)
     canvas.bind("<B1-Motion>", moveCallback)
     if markFilter:
@@ -291,10 +305,28 @@ def setupMarkCellHandlers(markFilter):
 #setup
 if mode == MODE_BOXES:
     setupMarkBoxHandlers()
-elif mode == MODE_FILTER:
-    setupMarkCellHandlers(True)
-elif mode == MODE_WATER:
-    setupMarkCellHandlers(False)
+else:
+    #initialise cells
+    cells = [
+        [None for row in range(image.size[1]//INPUT_HEIGHT)]
+        for col in range(image.size[0]//INPUT_WIDTH)
+    ]
+    #create cell outlines
+    for i in range(len(cells)):
+        for j in range(len(cells[0])):
+            boxes.append(
+                canvas.create_rectangle(
+                    i*INPUT_WIDTH,
+                    j*INPUT_HEIGHT,
+                    (i+1)*INPUT_WIDTH,
+                    (j+1)*INPUT_HEIGHT
+                )
+            )
+    #setup handlers
+    if mode == MODE_FILTER:
+        setupMarkCellHandlers(True)
+    elif mode == MODE_WATER:
+        setupMarkCellHandlers(False)
 
 #start application
 tkinter.mainloop()
