@@ -24,14 +24,14 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d dir1]
         -f
             The user marks grid cells that should always be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether a cell is marked.
-            The output contains lines holding image filenames.
-                Each such line is followed by indented lines for each row, containing 0s and 1s.
-                    A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+            The output contains lines for each row of cells, containing 0s and 1s.
+                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
         -w
             The user marks grid cells that contain mostly water and nothing else of significance.
             Clicking or dragging over a cell toggles whether a cell is marked.
-            The output contains lines for each row of cells, containing 0s and 1s.
-                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+            The output contains lines describing cells to be ignored image filenames.
+                Each such line is followed by indented lines for each row, containing 0s and 1s.
+                    A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
         -d dir1
             Use .jpg files in dir1 as the list of filenames.
 """
