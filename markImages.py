@@ -17,6 +17,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d dir1]
     Options:
         -b
             The user marks bounding boxes around dark buoys by clicking and dragging.
+            Boxes can be deleted by right-clicking.
             The output contains lines holding image filenames.
             Output lines have one of these formats:
                 Each such line is followed by indented lines, each specifying a bounding box.
@@ -100,11 +101,12 @@ canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk
 IMG_DOWNSCALE = 2
 INPUT_HEIGHT  = 32*IMG_DOWNSCALE
 INPUT_WIDTH   = 32*IMG_DOWNSCALE
-sel   = [None, None] #has the form [[x,y], [x,y]], and holds the corners of a box being created
-box   = None         #holds a rectangle shown while the mouse is being dragegd
-boxes = []           #holds created boxes
-cells = []           #cells[i][j] is a canvas box ID or None, indicating if the cell is marked
-mouseDownCell = None #has the form [i,j], specifying the last cell the mouse was in while held down
+sel           = [None, None] #has the form [[x,y], [x,y]], and holds the corners of a box being created
+box           = None         #holds a rectangle shown while the mouse is being dragegd
+boxCoords     = []           #has elements [x,y,x,y], describing created bounding boxes or grid cells
+boxIDs        = []           #holds IDs of boxes in 'boxCoords'
+cells         = []           #cells[i][j] is a canvas box ID or None, indicating if the cell is marked
+mouseDownCell = None         #has form [i,j], indicating the last cell the mouse was in while held down
 
 #handler setup functions
 def setupMarkBoxHandlers():
@@ -134,10 +136,8 @@ def setupMarkBoxHandlers():
     def releaseCallback(event):
         sel[1] = [event.x, event.y]
         canvas.delete(box)
-        boxes.append(
-            canvas.create_rectangle(
-                sel[0][0], sel[0][1], sel[1][0], sel[1][1]
-            )
+        boxIDs.append(
+            canvas.create_rectangle(sel[0][0], sel[0][1], sel[1][0], sel[1][1])
         )
         #convert to non-scaled image coordinates
         wscale = image.size[0]/canvasWidth
@@ -146,16 +146,35 @@ def setupMarkBoxHandlers():
         sel[0][1] = int(sel[0][1] * hscale)
         sel[1][0] = int(sel[1][0] * wscale)
         sel[1][1] = int(sel[1][1] * hscale)
-        print(" %d,%d,%d,%d" % (sel[0][0], sel[0][1], sel[1][0], sel[1][1]))
+        #store bounding box
+        boxCoords.append([sel[0][0], sel[0][1], sel[1][0], sel[1][1]])
+    def rightClickCallback(event):
+        #convert click coordinate to non-scaled image coordinates
+        x = int(event.x * image.size[0]/canvasWidth)
+        y = int(event.y * image.size[1]/canvasHeight)
+        #find and remove overlapping boxes
+        indices = []
+        for i in range(len(boxCoords)):
+            b = boxCoords[i]
+            if b[0] <= x and b[1] <= y and b[2] >= x and b[3] >= y:
+                indices.append(i)
+                canvas.delete(boxIDs[i])
+        for i in indices:
+            boxCoords[i:i+1] = []
+            boxIDs[i:i+1] = []
     def returnCallback(event):
-        global filenameIdx, image, imageTk, boxes
+        global filenameIdx, image, imageTk, boxCoords, boxIDs
+        #output box info
+        for b in boxCoords:
+            print(" %d,%d,%d,%d" % (b[0], b[1], b[2], b[3]))
         #move to next file, or exit
         filenameIdx += 1
         if filenameIdx < len(filenames):
             print(filenames[filenameIdx])
             window.title(filenames[filenameIdx]) #rename window
             canvas.delete(tkinter.ALL) #remove image and boxes
-            boxes = []
+            boxIDs = []
+            boxCoords = []
             #load new image
             image = Image.open(filenames[filenameIdx])
             imageTk = ImageTk.PhotoImage(
@@ -165,12 +184,17 @@ def setupMarkBoxHandlers():
         else:
             sys.exit(0)
     def escapeCallback(event):
+        #output box info
+        for b in boxCoords:
+            print(" %d,%d,%d,%d" % (b[0], b[1], b[2], b[3]))
+        #exit
         sys.exit(0)
     print(filenames[filenameIdx])
     canvas.bind("<Configure>", resizeCallback)
     canvas.bind("<Button-1>", clickCallback)
     canvas.bind("<B1-Motion>", moveCallback)
     canvas.bind("<ButtonRelease-1>", releaseCallback)
+    canvas.bind("<Button-3>", rightClickCallback)
     window.bind("<Return>", returnCallback)
     window.bind("<Escape>", escapeCallback)
 def setupMarkCellHandlers(markFilter):
@@ -227,7 +251,7 @@ def setupMarkCellHandlers(markFilter):
             mouseDownCell = [i, j]
             toggleCell(i,j)
     def markFilterReturnCallback(event):
-        global filenameIdx, image, imageTk, canvasImage, boxes, cells
+        global filenameIdx, image, imageTk, canvasImage, cells
         #move to next file, or exit
         filenameIdx += 1
         if filenameIdx < len(filenames):
@@ -248,7 +272,7 @@ def setupMarkCellHandlers(markFilter):
                 print()
             sys.exit(0)
     def markWaterReturnCallback(event):
-        global filenameIdx, image, imageTk, canvasImage, boxes, cells
+        global filenameIdx, image, imageTk, canvasImage, cells
         #output info
         print(filenames[filenameIdx])
         for row in range(len(cells[0])):
@@ -314,7 +338,7 @@ else:
     #create cell outlines
     for i in range(len(cells)):
         for j in range(len(cells[0])):
-            boxes.append(
+            boxIDs.append(
                 canvas.create_rectangle(
                     i*INPUT_WIDTH,
                     j*INPUT_HEIGHT,
