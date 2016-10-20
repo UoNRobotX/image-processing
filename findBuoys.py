@@ -216,6 +216,11 @@ class CoarseBatchProducer:
             y = j*INPUT_HEIGHT
             #get an input
             cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
+            cellImg = cellImg.rotate(math.floor(random.random() * 4) * 90) #randomly rotate
+            if random.random() > 0.5: #randomly flip
+                cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
+            if random.random() > 0.5: #randomly flip
+                cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
             data = np.array(list(cellImg.getdata())).astype(np.float32)
             data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
             inputs.append(data)
@@ -301,6 +306,11 @@ class BatchProducer:
                 y = j*INPUT_HEIGHT
                 #get an input
                 cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
+                cellImg = cellImg.rotate(math.floor(random.random() * 4) * 90) #randomly rotate
+                if random.random() > 0.5: #randomly flip
+                    cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
+                if random.random() > 0.5: #randomly flip
+                cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
                 data = np.array(list(cellImg.getdata())).astype(np.float32)
                 data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
                 potentialInputs.append(data)
