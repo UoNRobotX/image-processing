@@ -156,7 +156,6 @@ class CoarseBatchProducer:
         self.cells = []     #has the form [[[c1, c2, ...], ...], ...], specifying cells of images
         self.fileIdx = 0
         self.image = None
-        self.data = None
         self.valuesGenerated = 0
         self.unfilteredCells = None
         #read 'dataFile' (should have the same format as output by 'markImages.py' with -w)
@@ -180,9 +179,6 @@ class CoarseBatchProducer:
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
-        #obtain numpy array
-        self.data = np.array(list(self.image.getdata())).astype(np.float32)
-        self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
         #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
         rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
         colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
@@ -208,8 +204,6 @@ class CoarseBatchProducer:
                     (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                     resample=Image.LANCZOS
                 )
-                self.data = np.array(list(self.image.getdata())).astype(np.float32)
-                self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
             idx = self.unfilteredCells[
@@ -221,7 +215,10 @@ class CoarseBatchProducer:
             x = i*INPUT_WIDTH
             y = j*INPUT_HEIGHT
             #get an input
-            inputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+            cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
+            data = np.array(list(cellImg.getdata())).astype(np.float32)
+            data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
+            inputs.append(data)
             #get an output
             outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
             #update
@@ -236,7 +233,6 @@ class BatchProducer:
         self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
         self.fileIdx = 0
         self.image = None
-        self.data = None
         self.valuesGenerated = 0
         self.unfilteredCells = None
         self.coarseX = coarseX
@@ -265,9 +261,6 @@ class BatchProducer:
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
-        #obtain numpy array
-        self.data = np.array(list(self.image.getdata())).astype(np.float32)
-        self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
         #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
         rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
         colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
@@ -296,8 +289,6 @@ class BatchProducer:
                         (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                         resample=Image.LANCZOS
                     )
-                    self.data = np.array(list(self.image.getdata())).astype(np.float32)
-                    self.data = self.data.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
                     self.valuesGenerated = 0
                 #randomly select a non-filtered grid cell
                 idx = self.unfilteredCells[
@@ -309,7 +300,10 @@ class BatchProducer:
                 x = i*INPUT_WIDTH
                 y = j*INPUT_HEIGHT
                 #get an input
-                potentialInputs.append(self.data[y:y+INPUT_HEIGHT, x:x+INPUT_WIDTH, :])
+                cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
+                data = np.array(list(cellImg.getdata())).astype(np.float32)
+                data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
+                potentialInputs.append(data)
                 #get an output
                 topLeftX = x*IMG_DOWNSCALE + 15
                 topLeftY = y*IMG_DOWNSCALE + 15
