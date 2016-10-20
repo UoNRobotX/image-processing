@@ -1,6 +1,6 @@
 import sys, os, math, random, time
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import tensorflow as tf
 
 usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] [-o img1]
@@ -221,6 +221,8 @@ class CoarseBatchProducer:
                 cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
             if random.random() > 0.5: #randomly flip
                 cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+            #cellImg = ImageOps.autocontrast(cellImg)
+            #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
             data = np.array(list(cellImg.getdata())).astype(np.float32)
             data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
             inputs.append(data)
@@ -310,7 +312,9 @@ class BatchProducer:
                 if random.random() > 0.5: #randomly flip
                     cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
                 if random.random() > 0.5: #randomly flip
-                cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+                    cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+                #cellImg = ImageOps.autocontrast(cellImg)
+                #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 data = np.array(list(cellImg.getdata())).astype(np.float32)
                 data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
                 potentialInputs.append(data)
