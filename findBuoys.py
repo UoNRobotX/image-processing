@@ -353,18 +353,38 @@ with tf.name_scope('input'): #group nodes for easier viewing with tensorboard
     y_ = tf.placeholder(tf.float32, [None, 2], name='y_input')
     p_dropout = tf.placeholder(tf.float32, name='p_dropout')
 def createCoarseNetwork(x, y_):
-    with tf.name_scope('coarse_net'):
+    NET_NAME = 'coarse_net'
+    summaries = []
+    with tf.name_scope(NET_NAME):
         with tf.name_scope('input_reshape'):
             x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
+            #add summary
+            summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         with tf.name_scope('output'):
             with tf.name_scope('weights'):
-                w = tf.Variable(tf.truncated_normal([INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2], stddev=0.1))
+                w = tf.Variable(
+                    tf.truncated_normal([INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2], stddev=0.1)
+                )
+                #add summaries
+                mean = tf.reduce_mean(w)
+                summaries.append(tf.scalar_summary(NET_NAME + '/mean/weights', mean))
+                summaries.append(tf.scalar_summary(
+                    NET_NAME + '/stddev/weights', tf.reduce_mean(tf.square(w - mean))
+                ))
+                summaries.append(tf.histogram_summary(NET_NAME + '/weights', w))
             with tf.name_scope('biases'):
                 b = tf.Variable(tf.constant(0.1, shape=[2]))
+                #add summaries
+                mean = tf.reduce_mean(b)
+                summaries.append(tf.scalar_summary(NET_NAME + '/mean/biases', mean))
+                summaries.append(tf.scalar_summary(NET_NAME + '/stddev/biases', tf.reduce_mean(tf.square(b - mean))))
+                summaries.append(tf.histogram_summary(NET_NAME + '/biases', b))
             y = tf.nn.sigmoid(tf.matmul(x_flat, w) + b, 'y-output')
         #cost
         with tf.name_scope('cost'):
             cost = tf.reduce_mean(tf.square(y_ - y), reduction_indices=[1])
+            #add summary
+            summaries.append(tf.scalar_summary(NET_NAME + '/cost', tf.reduce_mean(cost)))
         #optimizer
         with tf.name_scope('train'):
             train = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
@@ -372,10 +392,12 @@ def createCoarseNetwork(x, y_):
         with tf.name_scope('accuracy'):
             correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            #add summary
+            summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
     #variables
     variables = [w, b]
     #return output nodes and trainer
-    return y, accuracy, train, variables
+    return y, accuracy, train, variables, tf.merge_summary(summaries)
 def createDetailedNetwork(x, y_, p_dropout):
     #helper functions
     def createWeights(shape):
@@ -391,25 +413,48 @@ def createDetailedNetwork(x, y_, p_dropout):
     def createPool(c):
         with tf.name_scope('pool'):
             return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
-    with tf.name_scope('detailed_net'):
+    def addSummaries(w, b, summaries, layerName):
+        #weight summaries
+        wMean = tf.reduce_mean(w)
+        summaries.append(tf.scalar_summary(layerName + '/mean/weights', wMean))
+        summaries.append(tf.scalar_summary(
+            layerName + 'stddev/weights', tf.reduce_mean(tf.square(w-wMean))
+        ))
+        summaries.append(tf.histogram_summary(layerName + '/weights', w))
+        #biases summaries
+        bMean = tf.reduce_mean(b)
+        summaries.append(tf.scalar_summary(layerName + '/mean/biases', bMean))
+        summaries.append(tf.scalar_summary(
+            layerName + 'stddev/biases', tf.reduce_mean(tf.square(b-bMean))
+        ))
+        summaries.append(tf.histogram_summary(layerName + '/biases', b))
+    #create nodes
+    NET_NAME = 'detailed_net'
+    summaries = []
+    with tf.name_scope(NET_NAME):
+        #add input image summary
+        summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         #first convolutional layer
         with tf.name_scope('conv_layer1'):
             w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
             b1 = createBiases([32])
             c1 = createConv(x, w1, b1)
             p1 = createPool(c1)
+            #addSummaries(w1, b1, summaries, NET_NAME + '/conv_layer1')
         #second convolutional layer
         with tf.name_scope('conv_layer2'):
             w2 = createWeights([5, 5, 32, 64])
             b2 = createBiases([64])
             c2 = createConv(p1, w2, b2)
             p2 = createPool(c2)
+            #addSummaries(w1, b1, summaries, NET_NAME + '/conv_layer2')
         #densely connected layer
         with tf.name_scope('dense_layer'):
             w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
             b3 = createBiases([1024])
             p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
             h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
+            #addSummaries(w3, b3, summaries, NET_NAME + '/dense_layer')
         #dropout
         h1_dropout = tf.nn.dropout(h1, p_dropout)
         #readout layer
@@ -419,23 +464,27 @@ def createDetailedNetwork(x, y_, p_dropout):
             y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
         #cost
         with tf.name_scope('cost'):
-            cross_entropy = tf.reduce_mean(
+            cost = tf.reduce_mean(
                 -tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)),
                 reduction_indices=[1])
             )
+            #add summary
+            summaries.append(tf.scalar_summary(NET_NAME + '/cost', cost))
         #optimizer
         with tf.name_scope('train'):
-            train = tf.train.AdamOptimizer().minimize(cross_entropy)
+            train = tf.train.AdamOptimizer().minimize(cost)
         #accuracy
         with tf.name_scope('accuracy'):
             correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            #add summary
+            summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
     #variables
     variables = [w1, b1, w2, b2, w3, b3, w4, b4]
     #return output nodes and trainer
-    return y, accuracy, train, variables
-cy, caccuracy, ctrain, cvariables = createCoarseNetwork(x, y_)
-y, accuracy, train, variables = createDetailedNetwork(x, y_, p_dropout)
+    return y, accuracy, train, variables, tf.merge_summary(summaries)
+cy, caccuracy, ctrain, cvariables, csummaries = createCoarseNetwork(x, y_)
+y, accuracy, train, variables, summaries = createDetailedNetwork(x, y_, p_dropout)
 
 #create savers
 saver = tf.train.Saver(tf.all_variables())
@@ -461,7 +510,11 @@ with tf.Session() as sess:
             startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                ctrain.run(feed_dict={x: inputs, y_: outputs})
+                summary, _ = sess.run(
+                    [csummaries, ctrain],
+                    feed_dict={x: inputs, y_: outputs}
+                )
+                summaryWriter.add_summary(summary, step)
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
                     print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
@@ -475,7 +528,11 @@ with tf.Session() as sess:
             startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                train.run(feed_dict={x: inputs, y_: outputs, p_dropout: 0.5})
+                summary, _ = sess.run(
+                    [summaries, train],
+                    feed_dict={x: inputs, y_: outputs, p_dropout: 0.5}
+                )
+                summaryWriter.add_summary(summary, step)
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
                     print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
