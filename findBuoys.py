@@ -40,8 +40,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] 
         -n
             Re-initialise values for the coarse/detailed network.
         -s n1
-            With 'train', specifies the number of training steps.
-            With 'test', specifies the number of test values.
+            With 'train' or 'test', specifies the number of steps done.
         -o img1
             With 'run' or 'sampels', specifies the image file to create.
             The defaults are 'output.jpg' and 'samples.jpg'.
@@ -132,7 +131,8 @@ TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
 TRAINING_SAVE_PERIOD = 1000 #save after every N steps
-TESTING_BATCH_SIZE   = numSteps #the number of inputs used for testing
+TESTING_STEPS        = numSteps #number of batches used for testing
+TESTING_BATCH_SIZE   = 50
 SUMMARIES_DIR        = 'summaries'
 
 #obtain filter
@@ -546,18 +546,36 @@ with tf.Session() as sess:
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/coarse', sess.graph)
             prod = CoarseBatchProducer(dataFile, cellFilter)
             startTime = time.time()
-            inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-            acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
-            print("%7.2f secs - test accuracy %g" % (time.time() - startTime, acc))
+            accuracies = []
+            for step in range(TESTING_STEPS):
+                inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
+                summary, acc = sess.run(
+                    [csummaries, caccuracy],
+                    feed_dict={x: inputs, y_: outputs}
+                )
+                summaryWriter.add_summary(summary, step)
+                accuracies.append(acc)
+                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+            avgAcc = sum(accuracies)/len(accuracies)
+            print("average accuracy %g" % avgAcc)
             summaryWriter.close()
         else:
             #test detailed network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/detailed', sess.graph)
             prod = BatchProducer(dataFile, cellFilter, x, cy)
             startTime = time.time()
-            inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-            acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
-            print("%7.2f secs - test accuracy %g" % (time.time() - startTime, acc))
+            accuracies = []
+            for step in range(TESTING_STEPS):
+                inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
+                summary, acc = sess.run(
+                    [summaries, accuracy],
+                    feed_dict={x: inputs, y_: outputs, p_dropout: 1.0}
+                )
+                summaryWriter.add_summary(summary, step)
+                accuracies.append(acc)
+                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+            avgAcc = sum(accuracies)/len(accuracies)
+            print("average accuracy %g" % avgAcc)
             summaryWriter.close()
     #running
     elif mode == MODE_RUN:
