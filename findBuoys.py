@@ -131,6 +131,7 @@ SAMPLES_OUTPUT_IMAGE = outputImg or "samples.jpg" #output image for 'sample' act
 TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
+TRAINING_SAVE_PERIOD = 1000 #save after every N steps
 TESTING_BATCH_SIZE   = numSteps #the number of inputs used for testing
 
 #obtain filter
@@ -422,6 +423,8 @@ with tf.Session() as sess:
     #initialising
     if os.path.exists(SAVE_FILE):
         saver.restore(sess, SAVE_FILE)
+    else:
+        sess.run(tf.initialize_all_variables())
     if reinitialise:
         if useCoarseOnly:
             sess.run(tf.initialize_variables(cvariables))
@@ -438,6 +441,8 @@ with tf.Session() as sess:
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
                     print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
+                if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
+                    saver.save(sess, SAVE_FILE)
         else:
             #train detailed network
             prod = BatchProducer(dataFile, cellFilter, x, cy)
@@ -448,6 +453,8 @@ with tf.Session() as sess:
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
                     print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+                if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
+                    saver.save(sess, SAVE_FILE)
     elif mode == MODE_TEST:
         if useCoarseOnly:
             #test coarse network
