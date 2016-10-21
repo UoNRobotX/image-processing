@@ -63,3 +63,8 @@
     * `python3 findBuoys.py run images/008.jpg`
 * View sample network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
     * `python3 findBuoys.py samples trainingData.txt`
+
+## Viewing graph and training/testing statistics with tensorboard.
+* The coarse or detailed network should have been trained or tested at least once.
+* `tensorboard --logdir=summaries`
+* Open a browser to localhost:6006
