@@ -130,9 +130,10 @@ SAMPLES_OUTPUT_IMAGE = outputImg or "samples.jpg" #output image for 'sample' act
 TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
-TRAINING_SAVE_PERIOD = 1000 #save after every N steps
+TRAINING_SAVE_PERIOD = 1000 #save every N steps
 TESTING_STEPS        = numSteps #number of batches used for testing
 TESTING_BATCH_SIZE   = 50
+TESTING_LOG_PERIOD   = 10
 SUMMARIES_DIR        = 'summaries'
 
 #obtain filter
@@ -555,7 +556,8 @@ with tf.Session() as sess:
                 )
                 summaryWriter.add_summary(summary, step)
                 accuracies.append(acc)
-                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+                if step % TESTING_LOG_PERIOD == 0:
+                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
             avgAcc = sum(accuracies)/len(accuracies)
             print("average accuracy %g" % avgAcc)
             summaryWriter.close()
@@ -573,7 +575,8 @@ with tf.Session() as sess:
                 )
                 summaryWriter.add_summary(summary, step)
                 accuracies.append(acc)
-                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+                if step % TESTING_LOG_PERIOD == 0:
+                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
             avgAcc = sum(accuracies)/len(accuracies)
             print("average accuracy %g" % avgAcc)
             summaryWriter.close()
