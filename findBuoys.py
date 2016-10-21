@@ -131,9 +131,11 @@ TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
 TRAINING_SAVE_PERIOD = 1000 #save every N steps
+TRAINING_RUN_PERIOD  = 50 #save runtime metadata every N steps
 TESTING_STEPS        = numSteps #number of batches used for testing
 TESTING_BATCH_SIZE   = 50
 TESTING_LOG_PERIOD   = 10
+TESTING_RUN_PERIOD   = 10
 SUMMARIES_DIR        = 'summaries'
 
 #obtain filter
@@ -511,10 +513,20 @@ with tf.Session() as sess:
             startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                summary, _ = sess.run(
-                    [csummaries, ctrain],
-                    feed_dict={x: inputs, y_: outputs}
-                )
+                if step > 0 and step % TRAINING_RUN_PERIOD == 0: #if saving runtime metadata
+                    run_metadata = tf.RunMetadata()
+                    summary, _ = sess.run(
+                        [csummaries, ctrain],
+                        feed_dict={x: inputs, y_: outputs},
+                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                        run_metadata=run_metadata
+                    )
+                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+                else:
+                    summary, _ = sess.run(
+                        [csummaries, ctrain],
+                        feed_dict={x: inputs, y_: outputs}
+                    )
                 summaryWriter.add_summary(summary, step)
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
@@ -529,10 +541,20 @@ with tf.Session() as sess:
             startTime = time.time()
             for step in range(TRAINING_STEPS):
                 inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                summary, _ = sess.run(
-                    [summaries, train],
-                    feed_dict={x: inputs, y_: outputs, p_dropout: 0.5}
-                )
+                if step > 0 and step % TRAINING_RUN_PERIOD == 0: #if saving runtime metadata
+                    run_metadata = tf.RunMetadata()
+                    summary, _ = sess.run(
+                        [summaries, train],
+                        feed_dict={x: inputs, y_: outputs, p_dropout: 0.5},
+                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                        run_metadata=run_metadata
+                    )
+                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+                else:
+                    summary, _ = sess.run(
+                        [summaries, train],
+                        feed_dict={x: inputs, y_: outputs, p_dropout: 0.5}
+                    )
                 summaryWriter.add_summary(summary, step)
                 if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                     acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
@@ -550,10 +572,20 @@ with tf.Session() as sess:
             accuracies = []
             for step in range(TESTING_STEPS):
                 inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-                summary, acc = sess.run(
-                    [csummaries, caccuracy],
-                    feed_dict={x: inputs, y_: outputs}
-                )
+                if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
+                    run_metadata = tf.RunMetadata()
+                    summary, acc = sess.run(
+                        [csummaries, caccuracy],
+                        feed_dict={x: inputs, y_: outputs},
+                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                        run_metadata=run_metadata
+                    )
+                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+                else:
+                    summary, acc = sess.run(
+                        [csummaries, caccuracy],
+                        feed_dict={x: inputs, y_: outputs}
+                    )
                 summaryWriter.add_summary(summary, step)
                 accuracies.append(acc)
                 if step % TESTING_LOG_PERIOD == 0:
@@ -569,10 +601,20 @@ with tf.Session() as sess:
             accuracies = []
             for step in range(TESTING_STEPS):
                 inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-                summary, acc = sess.run(
-                    [summaries, accuracy],
-                    feed_dict={x: inputs, y_: outputs, p_dropout: 1.0}
-                )
+                if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
+                    run_metadata = tf.RunMetadata()
+                    summary, acc = sess.run(
+                        [summaries, accuracy],
+                        feed_dict={x: inputs, y_: outputs, p_dropout: 1.0},
+                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                        run_metadata=run_metadata
+                    )
+                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+                else:
+                    summary, acc = sess.run(
+                        [summaries, accuracy],
+                        feed_dict={x: inputs, y_: outputs, p_dropout: 1.0}
+                    )
                 summaryWriter.add_summary(summary, step)
                 accuracies.append(acc)
                 if step % TESTING_LOG_PERIOD == 0:
