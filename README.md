@@ -56,23 +56,23 @@
 
 ## Working with the coarse network.
 * Create and train the coarse network, for 100 steps.
-    * `python3 findBuoys.py train trainingDataCoarse.txt -c -n -s 100`
+    * `python3 findBuoys.py train trainingDataCoarse.txt filterData.txt -c -n -s 100`
 * Test the coarse network.
-    * `python3 findBuoys.py test testingDataCoarse.txt -c`
+    * `python3 findBuoys.py test testingDataCoarse.txt filterData.txt -c`
 * View the results of running the coarse network on an image. After running, a representation of the results is saved in outputFindBuoys.jpg.
-    * `python3 findBuoys.py run images/008.jpg -c`
+    * `python3 findBuoys.py run images/008.jpg filterData.txt -c`
 * View sample coarse network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
-    * `python3 findBuoys.py samples trainingDataCoarse.txt -c`
+    * `python3 findBuoys.py samples trainingDataCoarse.txt filterData.txt -c`
 
 ## Working with the whole network.
 * Create and train the network, for 100 steps.
-    * `python3 findBuoys.py train trainingData.txt -n -s 100`
+    * `python3 findBuoys.py train trainingData.txt filterData.txt -n -s 100`
 * Test the network.
-    * `python3 findBuoys.py test testingData.txt`
+    * `python3 findBuoys.py test testingData.txt filterData.txt`
 * View the results of running the network on an image. After running, a representation of the results is saved in outputFindBuoys.jpg.
-    * `python3 findBuoys.py run images/008.jpg`
+    * `python3 findBuoys.py run images/008.jpg filterData.txt`
 * View sample network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
-    * `python3 findBuoys.py samples trainingData.txt`
+    * `python3 findBuoys.py samples trainingData.txt filterData.txt`
 
 ## Viewing graph and training/testing statistics with tensorboard.
 * The coarse or detailed network should have been trained or tested at least once.
