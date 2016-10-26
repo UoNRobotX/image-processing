@@ -18,7 +18,7 @@
 
 ## Generating the images.
 1. Create a videos/ directory, and place the videos in it.
-2. `. genImages.sh`
+2. `./genImages.sh`
 
 ## Creating training/testing data.
 1. Label the grid cells to use for the filter (used to ignore camera boundaries, WAM-V 'roof', etc).
