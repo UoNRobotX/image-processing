@@ -138,7 +138,7 @@ TESTING_LOG_PERIOD   = 10
 TESTING_RUN_PERIOD   = 10
 SUMMARIES_DIR        = 'summaries'
 
-#obtain filter
+#obtain grid cell filter
 cellFilter = None #has the form [[flag1, ...], ...], specifying filtered cells
 if filterFile != "":
     cellFilter = []
@@ -151,10 +151,10 @@ else:
         for row in IMG_SCALED_HEIGHT // INPUT_HEIGHT
     ]
 
-#classes for producing input values
+#class for producing coarse network input values from a training/test data file
 class CoarseBatchProducer:
     "Produces input values for the coarse network"
-    VALUES_PER_IMAGE = 30
+    VALUES_PER_IMAGE = 100
     #constructor
     def __init__(self, dataFile, cellFilter):
         self.filenames = [] #list of image files
@@ -236,9 +236,11 @@ class CoarseBatchProducer:
             #update
             self.valuesGenerated += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
+
+#class for producing detailed network input values from a training/test data file
 class BatchProducer:
     "Produces input values for the detailed network"
-    VALUES_PER_IMAGE = 30
+    VALUES_PER_IMAGE = 100
     #constructor
     def __init__(self, dataFile, cellFilter, coarseX, coarseY):
         self.filenames = [] #list of image files
@@ -356,33 +358,44 @@ with tf.name_scope('input'): #group nodes for easier viewing with tensorboard
     y_ = tf.placeholder(tf.float32, [None, 2], name='y_input')
     p_dropout = tf.placeholder(tf.float32, name='p_dropout')
 def createCoarseNetwork(x, y_):
+    #helper functions
+    def createLayer(inSize, outSize, netName, layerName, variables, summaries):
+        with tf.name_scope(layerName):
+            with tf.name_scope('weights'):
+                w = tf.Variable(
+                    tf.truncated_normal([inSize, outSize], stddev=0.1)
+                )
+                variables.append(w)
+                #add summaries
+                mean = tf.reduce_mean(w)
+                summaries.append(tf.scalar_summary(netName + '/mean/' + layerName + '/weights', mean))
+                summaries.append(tf.scalar_summary(
+                    netName + '/stddev/' + layerName + '/weights', tf.reduce_mean(tf.square(w - mean))
+                ))
+                summaries.append(tf.histogram_summary(netName + '/' + layerName + '/weights', w))
+            with tf.name_scope('biases'):
+                b = tf.Variable(tf.constant(0.1, shape=[2]))
+                variables.append(b)
+                #add summaries
+                mean = tf.reduce_mean(b)
+                summaries.append(tf.scalar_summary(netName + '/mean/' + layerName + '/biases', mean))
+                summaries.append(tf.scalar_summary(
+                    netName + '/stddev/' + layerName + '/biases', tf.reduce_mean(tf.square(b - mean))
+                ))
+                summaries.append(tf.histogram_summary(netName + '/' + layerName + '/biases', b))
+            return tf.nn.sigmoid(tf.matmul(x_flat, w) + b, 'out')
+    #create nodes
     NET_NAME = 'coarse_net'
     summaries = []
+    variables = []
     with tf.name_scope(NET_NAME):
         with tf.name_scope('input_reshape'):
             x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
-        with tf.name_scope('output'):
-            with tf.name_scope('weights'):
-                w = tf.Variable(
-                    tf.truncated_normal([INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2], stddev=0.1)
-                )
-                #add summaries
-                mean = tf.reduce_mean(w)
-                summaries.append(tf.scalar_summary(NET_NAME + '/mean/weights', mean))
-                summaries.append(tf.scalar_summary(
-                    NET_NAME + '/stddev/weights', tf.reduce_mean(tf.square(w - mean))
-                ))
-                summaries.append(tf.histogram_summary(NET_NAME + '/weights', w))
-            with tf.name_scope('biases'):
-                b = tf.Variable(tf.constant(0.1, shape=[2]))
-                #add summaries
-                mean = tf.reduce_mean(b)
-                summaries.append(tf.scalar_summary(NET_NAME + '/mean/biases', mean))
-                summaries.append(tf.scalar_summary(NET_NAME + '/stddev/biases', tf.reduce_mean(tf.square(b - mean))))
-                summaries.append(tf.histogram_summary(NET_NAME + '/biases', b))
-            y = tf.nn.sigmoid(tf.matmul(x_flat, w) + b, 'y-output')
+        y = createLayer(
+            INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2, NET_NAME, 'output_layer', variables, summaries
+        )
         #cost
         with tf.name_scope('cost'):
             cost = tf.reduce_mean(tf.square(y_ - y), reduction_indices=[1])
@@ -397,8 +410,6 @@ def createCoarseNetwork(x, y_):
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
             #add summary
             summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
-    #variables
-    variables = [w, b]
     #return output nodes and trainer
     return y, accuracy, train, variables, tf.merge_summary(summaries)
 def createDetailedNetwork(x, y_, p_dropout):
@@ -506,122 +517,97 @@ with tf.Session() as sess:
             sess.run(tf.initialize_variables(variables))
     #training
     if mode == MODE_TRAIN:
-        if useCoarseOnly:
-            #train coarse network
+        if useCoarseOnly: #train coarse network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/train/coarse', sess.graph)
             prod = CoarseBatchProducer(dataFile, cellFilter)
-            startTime = time.time()
-            for step in range(TRAINING_STEPS):
-                inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                if step > 0 and step % TRAINING_RUN_PERIOD == 0: #if saving runtime metadata
-                    run_metadata = tf.RunMetadata()
-                    summary, _ = sess.run(
-                        [csummaries, ctrain],
-                        feed_dict={x: inputs, y_: outputs},
-                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
-                        run_metadata=run_metadata
-                    )
-                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
-                else:
-                    summary, _ = sess.run(
-                        [csummaries, ctrain],
-                        feed_dict={x: inputs, y_: outputs}
-                    )
-                summaryWriter.add_summary(summary, step)
-                if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
-                    acc = caccuracy.eval(feed_dict={x: inputs, y_: outputs})
-                    print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
-                if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
-                    saver.save(sess, SAVE_FILE)
-            summaryWriter.close()
-        else:
-            #train detailed network
+            summariesNode = csummaries
+            trainNode = ctrain
+            accuracyNode = caccuracy
+            feedDictDefaults = {}
+            feedDictDefaultsAcc = {}
+        else: #train detailed network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/train/detailed', sess.graph)
             prod = BatchProducer(dataFile, cellFilter, x, cy)
-            startTime = time.time()
-            for step in range(TRAINING_STEPS):
-                inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
-                if step > 0 and step % TRAINING_RUN_PERIOD == 0: #if saving runtime metadata
-                    run_metadata = tf.RunMetadata()
-                    summary, _ = sess.run(
-                        [summaries, train],
-                        feed_dict={x: inputs, y_: outputs, p_dropout: 0.5},
-                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
-                        run_metadata=run_metadata
-                    )
-                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
-                else:
-                    summary, _ = sess.run(
-                        [summaries, train],
-                        feed_dict={x: inputs, y_: outputs, p_dropout: 0.5}
-                    )
-                summaryWriter.add_summary(summary, step)
-                if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
-                    acc = accuracy.eval(feed_dict={x: inputs, y_: outputs, p_dropout: 1.0})
-                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
-                if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
-                    saver.save(sess, SAVE_FILE)
-            summaryWriter.close()
+            summariesNode = summaries
+            trainNode = train
+            accuracyNode = accuracy
+            feedDictDefaults = {p_dropout: 0.5}
+            feedDictDefaultsAcc = {p_dropout: 1.0}
+        #train
+        startTime = time.time()
+        for step in range(TRAINING_STEPS):
+            inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
+            feedDict = feedDictDefaults.copy()
+            feedDict.update({x: inputs, y_: outputs})
+            if step > 0 and step % TRAINING_RUN_PERIOD == 0: #occasionally save runtime metadata
+                run_metadata = tf.RunMetadata()
+                summary, _ = sess.run(
+                    [summariesNode, trainNode],
+                    feed_dict=feedDict,
+                    options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                    run_metadata=run_metadata
+                )
+                summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+            else:
+                summary, _ = sess.run(
+                    [summariesNode, trainNode],
+                    feed_dict=feedDict
+                )
+            summaryWriter.add_summary(summary, step) #write summary data for viewing with tensorboard
+            #occasionally print step and accuracy
+            if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
+                feedDictAcc = feedDictDefaultsAcc.copy()
+                feedDictAcc.update({x: inputs, y_: outputs})
+                acc = accuracyNode.eval(feed_dict=feedDictAcc)
+                print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
+            #occasionally save variable values
+            if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
+                saver.save(sess, SAVE_FILE)
+        summaryWriter.close()
     #testing
     elif mode == MODE_TEST:
-        if useCoarseOnly:
-            #test coarse network
+        if useCoarseOnly: #test coarse network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/coarse', sess.graph)
             prod = CoarseBatchProducer(dataFile, cellFilter)
-            startTime = time.time()
-            accuracies = []
-            for step in range(TESTING_STEPS):
-                inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-                if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
-                    run_metadata = tf.RunMetadata()
-                    summary, acc = sess.run(
-                        [csummaries, caccuracy],
-                        feed_dict={x: inputs, y_: outputs},
-                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
-                        run_metadata=run_metadata
-                    )
-                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
-                else:
-                    summary, acc = sess.run(
-                        [csummaries, caccuracy],
-                        feed_dict={x: inputs, y_: outputs}
-                    )
-                summaryWriter.add_summary(summary, step)
-                accuracies.append(acc)
-                if step % TESTING_LOG_PERIOD == 0:
-                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
-            avgAcc = sum(accuracies)/len(accuracies)
-            print("average accuracy %g" % avgAcc)
-            summaryWriter.close()
-        else:
-            #test detailed network
+            summariesNode = csummaries
+            trainNode = ctrain
+            accuracyNode = caccuracy
+            feedDictDefaults = {}
+        else: #test detailed network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/detailed', sess.graph)
             prod = BatchProducer(dataFile, cellFilter, x, cy)
-            startTime = time.time()
-            accuracies = []
-            for step in range(TESTING_STEPS):
-                inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
-                if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
-                    run_metadata = tf.RunMetadata()
-                    summary, acc = sess.run(
-                        [summaries, accuracy],
-                        feed_dict={x: inputs, y_: outputs, p_dropout: 1.0},
-                        options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
-                        run_metadata=run_metadata
-                    )
-                    summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
-                else:
-                    summary, acc = sess.run(
-                        [summaries, accuracy],
-                        feed_dict={x: inputs, y_: outputs, p_dropout: 1.0}
-                    )
-                summaryWriter.add_summary(summary, step)
-                accuracies.append(acc)
-                if step % TESTING_LOG_PERIOD == 0:
-                    print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
-            avgAcc = sum(accuracies)/len(accuracies)
-            print("average accuracy %g" % avgAcc)
-            summaryWriter.close()
+            summariesNode = summaries
+            trainNode = train
+            accuracyNode = accuracy
+            feedDictDefaults = {p_dropout: 1.0}
+        #test
+        startTime = time.time()
+        accuracies = []
+        for step in range(TESTING_STEPS):
+            inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
+            feedDict = feedDictDefaults.copy()
+            feedDict.update({x: inputs, y_: outputs})
+            if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
+                run_metadata = tf.RunMetadata()
+                summary, acc = sess.run(
+                    [summariesNode, accuracyNode],
+                    feed_dict=feedDict,
+                    options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                    run_metadata=run_metadata
+                )
+                summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+            else:
+                summary, acc = sess.run(
+                    [summariesNode, accuracyNode],
+                    feed_dict=feedDict
+                )
+            summaryWriter.add_summary(summary, step)
+            accuracies.append(acc)
+            if step % TESTING_LOG_PERIOD == 0:
+                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
+        avgAcc = sum(accuracies)/len(accuracies)
+        print("average accuracy %g" % avgAcc)
+        summaryWriter.close()
     #running
     elif mode == MODE_RUN:
         #obtain PIL image
@@ -638,35 +624,32 @@ with tf.Session() as sess:
         ]
         #get results
         startTime = time.time()
-        if useCoarseOnly:
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    if cellFilter != None and cellFilter[i][j] == 1:
-                        p[i][j] = -2
-                    else:
-                        out = cy.eval(feed_dict={
-                            x: array[
-                                :,
-                                INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
-                                INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
-                                :
-                            ]
-                        })
+        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                if cellFilter != None and cellFilter[i][j] == 1:
+                    p[i][j] = -2
+                else:
+                    out = cy.eval(feed_dict={
+                        x: array[
+                            :,
+                            INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
+                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
+                            :
+                        ]
+                    })
+                    if useCoarseOnly:
                         p[i][j] = out[0][0]
-        else:
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    if cellFilter != None and cellFilter[i][j] == 1:
-                        p[i][j] = -2
                     else:
-                        coarseOut = cy.eval(feed_dict={
-                            x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
-                        })
-                        if coarseOut[0][0] > 0.5:
+                        if out[0][0] > 0.5:
                             p[i][j] = -1
                         else:
                             out = y.eval(feed_dict={
-                                x: array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
+                                x: array[
+                                    :,
+                                    INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
+                                    INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
+                                    :
+                                ],
                                 p_dropout: 1.0
                             })
                             p[i][j] = out[0][0]
