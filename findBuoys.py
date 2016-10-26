@@ -229,6 +229,7 @@ class CoarseBatchProducer:
             #cellImg = ImageOps.autocontrast(cellImg)
             #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
             data = np.array(list(cellImg.getdata())).astype(np.float32)
+            #data = data/255 #normalize values
             data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
             inputs.append(data)
             #get an output
@@ -323,6 +324,7 @@ class BatchProducer:
                 #cellImg = ImageOps.autocontrast(cellImg)
                 #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 data = np.array(list(cellImg.getdata())).astype(np.float32)
+                #data = data/255 #normalize values
                 data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
                 potentialInputs.append(data)
                 #get an output
@@ -359,7 +361,7 @@ with tf.name_scope('input'): #group nodes for easier viewing with tensorboard
     p_dropout = tf.placeholder(tf.float32, name='p_dropout')
 def createCoarseNetwork(x, y_):
     #helper functions
-    def createLayer(inSize, outSize, netName, layerName, variables, summaries):
+    def createLayer(input, inSize, outSize, netName, layerName, variables, summaries):
         with tf.name_scope(layerName):
             with tf.name_scope('weights'):
                 w = tf.Variable(
@@ -374,7 +376,7 @@ def createCoarseNetwork(x, y_):
                 ))
                 summaries.append(tf.histogram_summary(netName + '/' + layerName + '/weights', w))
             with tf.name_scope('biases'):
-                b = tf.Variable(tf.constant(0.1, shape=[2]))
+                b = tf.Variable(tf.constant(0.1, shape=[outSize]))
                 variables.append(b)
                 #add summaries
                 mean = tf.reduce_mean(b)
@@ -383,7 +385,7 @@ def createCoarseNetwork(x, y_):
                     netName + '/stddev/' + layerName + '/biases', tf.reduce_mean(tf.square(b - mean))
                 ))
                 summaries.append(tf.histogram_summary(netName + '/' + layerName + '/biases', b))
-            return tf.nn.sigmoid(tf.matmul(x_flat, w) + b, 'out')
+            return tf.nn.sigmoid(tf.matmul(input, w) + b, 'out')
     #create nodes
     NET_NAME = 'coarse_net'
     summaries = []
@@ -394,7 +396,7 @@ def createCoarseNetwork(x, y_):
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         y = createLayer(
-            INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2, NET_NAME, 'output_layer', variables, summaries
+            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2, NET_NAME, 'output_layer', variables, summaries
         )
         #cost
         with tf.name_scope('cost'):
