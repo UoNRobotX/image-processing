@@ -6,6 +6,16 @@
 * Python 3 Pillow (for processing image files)
 * Python 3 Tk (optional, used to provide a GUI for generating training/testing data)
 
+## An example of installing the dependencies on Debian 8.4.
+* `apt-get update`
+* `apt-get install python3-dev python3-pip`
+* `export TF_BINARY_URL=https://storage.googleapis.com/tensorflow/linux/cpu/tensorflow-0.11.0rc1-cp35-cp35m-linux_x86_64.whl`
+* `pip3 install --upgrade $TF_BINARY_URL`
+* `apt-get install libtiff5-dev libjpeg-dev zlib1g-dev libfreetype6-dev`
+* `apt-get install liblcms2-dev libwebp-dev tcl-dev tk-dev`
+* `pip3 install Pillow`
+* `apt-get install python3-tk`
+
 ## An example of generating training data from videos
 1. Place videos in videos/, and cd to it.
 2. Get images from each video, placing them in images/.
@@ -63,3 +73,8 @@
     * `python3 findBuoys.py run images/008.jpg`
 * View sample network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
     * `python3 findBuoys.py samples trainingData.txt`
+
+## Viewing graph and training/testing statistics with tensorboard.
+* The coarse or detailed network should have been trained or tested at least once.
+* `tensorboard --logdir=summaries`
+* Open a browser to localhost:6006

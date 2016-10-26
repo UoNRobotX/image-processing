@@ -1,5 +1,6 @@
 images
 images_boxed
 images_marked
-modelData
+modelData/*
+summaries
 videos
