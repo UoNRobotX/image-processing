@@ -233,7 +233,7 @@ class CoarseBatchProducer:
             #cellImg = ImageOps.autocontrast(cellImg)
             #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
             data = np.array(list(cellImg.getdata())).astype(np.float32)
-            #data = data/255 #normalize values
+            data = data/255 #normalize values
             data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
             inputs.append(data)
             #get an output
@@ -401,10 +401,10 @@ def createCoarseNetwork(x, y_):
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         h = createLayer(
-            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 30, NET_NAME, 'hidden_layer', variables, summaries
+            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 10, NET_NAME, 'hidden_layer', variables, summaries
         )
         y = createLayer(
-            h, 30, 1, NET_NAME, 'output_layer', variables, summaries
+            h, 10, 1, NET_NAME, 'output_layer', variables, summaries
         )
         #y = createLayer(
         #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 1, NET_NAME, 'output_layer', variables, summaries
@@ -417,15 +417,35 @@ def createCoarseNetwork(x, y_):
             summaries.append(tf.scalar_summary(NET_NAME + '/cost', tf.reduce_mean(cost)))
         #optimizer
         with tf.name_scope('train'):
-            train = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
+            train = tf.train.AdamOptimizer().minimize(cost)
         #accuracy
         with tf.name_scope('accuracy'):
-            correctness = tf.equal(tf.greater(y, tf.constant(0.5)), tf.greater(y2, tf.constant(0.5)))
+            y_pred = tf.greater(y, tf.constant(0.5))
+            y2_pred = tf.greater(y2, tf.constant(0.5))
+            correctness = tf.equal(y_pred, y2_pred)
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            truePos = tf.reduce_sum(tf.cast(
+                tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
+                tf.float32
+            ))
+            predPos = tf.reduce_sum(tf.cast(y_pred, tf.float32))
+            actualPos = tf.reduce_sum(tf.cast(y2_pred, tf.float32))
+            prec = tf.cond(
+                tf.equal(predPos, tf.constant(0.0)),
+                lambda: tf.constant(0.0),
+                lambda: truePos / predPos
+            )
+            rec  = tf.cond(
+                tf.equal(actualPos, tf.constant(0.0)),
+                lambda: tf.constant(0.0),
+                lambda: truePos / actualPos
+            )
             #add summary
             summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
+            summaries.append(tf.scalar_summary(NET_NAME + '/precision', prec))
+            summaries.append(tf.scalar_summary(NET_NAME + '/recall', rec))
     #return output nodes and trainer
-    return y, accuracy, train, variables, tf.merge_summary(summaries)
+    return y, accuracy, prec, rec, train, variables, tf.merge_summary(summaries)
 def createDetailedNetwork(x, y_, p_dropout):
     #helper functions
     def createWeights(shape):
@@ -503,16 +523,36 @@ def createDetailedNetwork(x, y_, p_dropout):
             train = tf.train.AdamOptimizer().minimize(cost)
         #accuracy
         with tf.name_scope('accuracy'):
-            correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+            y_pred  = tf.greater(tf.slice(y,  [0, 0], [-1, 1]), tf.slice(y,  [0, 1], [-1, 1]))
+            y2_pred = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.slice(y_, [0, 1], [-1, 1]))
+            correctness = tf.equal(y_pred, y2_pred)
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            truePos = tf.reduce_sum(tf.cast(
+                tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
+                tf.float32
+            ))
+            predPos = tf.reduce_sum(tf.cast(y_pred, tf.float32))
+            actualPos = tf.reduce_sum(tf.cast(y2_pred, tf.float32))
+            prec = tf.cond(
+                tf.equal(predPos, tf.constant(0.0)),
+                lambda: tf.constant(0.0),
+                lambda: truePos / predPos
+            )
+            rec  = tf.cond(
+                tf.equal(actualPos, tf.constant(0.0)),
+                lambda: tf.constant(0.0),
+                lambda: truePos / actualPos
+            )
             #add summary
             summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
+            summaries.append(tf.scalar_summary(NET_NAME + '/precision', prec))
+            summaries.append(tf.scalar_summary(NET_NAME + '/recall', rec))
     #variables
     variables = [w1, b1, w2, b2, w3, b3, w4, b4]
     #return output nodes and trainer
-    return y, accuracy, train, variables, tf.merge_summary(summaries)
-cy, caccuracy, ctrain, cvariables, csummaries = createCoarseNetwork(x, y_)
-y, accuracy, train, variables, summaries = createDetailedNetwork(x, y_, p_dropout)
+    return y, accuracy, prec, rec, train, variables, tf.merge_summary(summaries)
+cy, caccuracy, cprecision, crecall, ctrain, cvariables, csummaries = createCoarseNetwork(x, y_)
+y, accuracy, precision, recall, train, variables, summaries = createDetailedNetwork(x, y_, p_dropout)
 
 #create savers
 saver = tf.train.Saver(tf.all_variables())
@@ -537,6 +577,8 @@ with tf.Session() as sess:
             summariesNode = csummaries
             trainNode = ctrain
             accuracyNode = caccuracy
+            precNode = cprecision
+            recNode = crecall
             feedDictDefaults = {}
             feedDictDefaultsAcc = {}
         else: #train detailed network
@@ -545,6 +587,8 @@ with tf.Session() as sess:
             summariesNode = summaries
             trainNode = train
             accuracyNode = accuracy
+            precNode = precision
+            recNode = recall
             feedDictDefaults = {p_dropout: 0.5}
             feedDictDefaultsAcc = {p_dropout: 1.0}
         #train
@@ -572,12 +616,12 @@ with tf.Session() as sess:
             if step % TRAINING_LOG_PERIOD == 0 or step == TRAINING_STEPS-1:
                 feedDictAcc = feedDictDefaultsAcc.copy()
                 feedDictAcc.update({x: inputs, y_: outputs})
-                acc = accuracyNode.eval(feed_dict=feedDictAcc)
+                acc, prec, rec = sess.run([accuracyNode, precNode, recNode], feed_dict=feedDictAcc)
                 #print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
                 rps = (outputs.argmax(1) == 0).sum() / len(outputs) #num positive samples / num samples
                 print(
-                    "%7.2f secs - step %4d, accuracy %.2f, rps %.2f" %
-                    (time.time() - startTime, step, acc, rps)
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %.2f" %
+                    (time.time() - startTime, step, acc, prec, rec, rps)
                 )
             #occasionally save variable values
             if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
@@ -591,6 +635,8 @@ with tf.Session() as sess:
             summariesNode = csummaries
             trainNode = ctrain
             accuracyNode = caccuracy
+            precNode = cprecision
+            recNode = crecall
             feedDictDefaults = {}
         else: #test detailed network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/detailed', sess.graph)
@@ -598,34 +644,44 @@ with tf.Session() as sess:
             summariesNode = summaries
             trainNode = train
             accuracyNode = accuracy
+            precNode = precision
+            recNode = recall
             feedDictDefaults = {p_dropout: 1.0}
         #test
         startTime = time.time()
-        accuracies = []
+        metrics = [] #[[accuracy, precision, recall], ...]
         for step in range(TESTING_STEPS):
             inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
             feedDict = feedDictDefaults.copy()
             feedDict.update({x: inputs, y_: outputs})
             if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
                 run_metadata = tf.RunMetadata()
-                summary, acc = sess.run(
-                    [summariesNode, accuracyNode],
+                summary, acc, prec, rec = sess.run(
+                    [summariesNode, accuracyNode, precNode, recNode],
                     feed_dict=feedDict,
                     options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
                     run_metadata=run_metadata
                 )
                 summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
             else:
-                summary, acc = sess.run(
-                    [summariesNode, accuracyNode],
+                summary, acc, prec, rec = sess.run(
+                    [summariesNode, accuracyNode, precNode, recNode],
                     feed_dict=feedDict
                 )
             summaryWriter.add_summary(summary, step)
-            accuracies.append(acc)
             if step % TESTING_LOG_PERIOD == 0:
-                print("%7.2f secs - step %d, accuracy %g" % (time.time()-startTime, step, acc))
-        avgAcc = sum(accuracies)/len(accuracies)
-        print("average accuracy %g" % avgAcc)
+                print(
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f" %
+                    (time.time()-startTime, step, acc, prec, rec)
+                )
+                metrics.append([acc, prec, rec])
+        accs  = [m[0] for m in metrics]
+        precs = [m[1] for m in metrics]
+        recs  = [m[2] for m in metrics]
+        print(
+            "Averages: accuracy %.2f, precision %.2f, recall %.2f" %
+            (sum(accs)/len(accs), sum(precs)/len(precs), sum(recs)/len(recs))
+        )
         summaryWriter.close()
     #running
     elif mode == MODE_RUN:
