@@ -713,9 +713,9 @@ with tf.Session() as sess:
                         ]
                     })
                     if useCoarseOnly:
-                        p[i][j] = out[0][0]
+                        p[i][j] = out[0]
                     else:
-                        if out[0][0] > 0.5:
+                        if out[0] > 0.5:
                             p[i][j] = -1
                         else:
                             out = y.eval(feed_dict={
