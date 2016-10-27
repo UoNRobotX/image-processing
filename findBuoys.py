@@ -198,7 +198,8 @@ class CoarseBatchProducer:
     def getBatch(self, size):
         inputs = []
         outputs = []
-        for i in range(size):
+        c = 0
+        while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 #open next image file
                 self.fileIdx += 1
@@ -219,6 +220,9 @@ class CoarseBatchProducer:
             j = idx // rowSize
             x = i*INPUT_WIDTH
             y = j*INPUT_HEIGHT
+            #bias samples towards positive examples
+            #if self.cells[self.fileIdx][j][i] == 0 and random.random() < 0.5:
+            #    continue
             #get an input
             cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
             cellImg = cellImg.rotate(math.floor(random.random() * 4) * 90) #randomly rotate
@@ -236,6 +240,7 @@ class CoarseBatchProducer:
             outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
             #update
             self.valuesGenerated += 1
+            c += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 #class for producing detailed network input values from a training/test data file
@@ -401,6 +406,9 @@ def createCoarseNetwork(x, y_):
         y = createLayer(
             h, 30, 1, NET_NAME, 'output_layer', variables, summaries
         )
+        #y = createLayer(
+        #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 1, NET_NAME, 'output_layer', variables, summaries
+        #)
         y2 = tf.slice(y_, [0, 0], [-1, 1])
         #cost
         with tf.name_scope('cost'):
@@ -708,6 +716,7 @@ with tf.Session() as sess:
         image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
         draw = ImageDraw.Draw(image, "RGBA")
         #get samples
+        numPositive = 0
         startTime = time.time()
         for i in range(NUM_SAMPLES[0]):
             for j in range(NUM_SAMPLES[1]):
@@ -727,8 +736,11 @@ with tf.Session() as sess:
                         INPUT_WIDTH*(i+1),
                         INPUT_HEIGHT*(j+1),
                     ], fill=(0,255,0,64))
+                    numPositive += 1
         image.save(SAMPLES_OUTPUT_IMAGE)
         #output time taken
-        print("%7.2f secs - output written to %s" % (time.time() - startTime, SAMPLES_OUTPUT_IMAGE))
+        print("Time: %.2f secs" % (time.time() - startTime))
+        print("Ratio of positive samples: %.2f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
+        print("Output written to %s" % SAMPLES_OUTPUT_IMAGE)
     #saving
     saver.save(sess, SAVE_FILE)
