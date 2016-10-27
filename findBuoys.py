@@ -3,7 +3,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] [-o img1]
+usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] [-o img1] [-t t1]
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist.
     If neither -c nor -d is given, -d is assumed.
@@ -44,19 +44,25 @@ usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] 
         -o img1
             With 'run' or 'sampels', specifies the image file to create.
             The defaults are 'output.jpg' and 'samples.jpg'.
+        -t t1
+            Affects the precision-recall tradeoff.
+            With -c, a prediction confidence above t1 causes a positive predictions (default 0.5).
+            With 'run', output cells predicted are fully colored, not partially colored by confidence.
 """
 
 #process command line arguments
-MODE_TRAIN    = 0
-MODE_TEST     = 1
-MODE_RUN      = 2
-MODE_SAMPLES  = 3
-mode          = None
-useCoarseOnly = False
-dataFile      = None
-filterFile    = None
-outputImg     = None
-reinitialise  = False
+MODE_TRAIN     = 0
+MODE_TEST      = 1
+MODE_RUN       = 2
+MODE_SAMPLES   = 3
+mode           = None
+useCoarseOnly  = False
+dataFile       = None
+filterFile     = None
+outputImg      = None
+reinitialise   = False
+threshold      = 0.5
+thresholdGiven = False
 numSteps = 100
 i = 1
 while i < len(sys.argv):
@@ -83,6 +89,21 @@ while i < len(sys.argv):
             outputImg = sys.argv[i]
         else:
             print("No argument for -o", file=sys.stderr)
+            sys.exit(1)
+    elif arg == "-t":
+        i += 1
+        thresholdGiven = True
+        if i < len(sys.argv):
+            try:
+                threshold = float(sys.argv[i])
+                if threshold <= 0 or threshold >= 1:
+                    print("Out-of-range argument for -t", file=sys.stderr)
+                    sys.exit(1)
+            except ValueError:
+                print("Non-numeric argument for -t", file=sys.stderr)
+                sys.exit(1)
+        else:
+            print("No argument for -t", file=sys.stderr)
             sys.exit(1)
     else:
         if mode == None:
@@ -350,7 +371,7 @@ class BatchProducer:
                 self.valuesGenerated += 1
             #filter using coarse network
             out = self.coarseY.eval(feed_dict={self.coarseX: np.array(potentialInputs)})
-            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < 0.5]
+            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < threshold]
             inputs  += [potentialInputs[i] for i in unfilteredIndices]
             outputs += [potentialOutputs[i] for i in unfilteredIndices]
             #update
@@ -420,7 +441,7 @@ def createCoarseNetwork(x, y_):
             train = tf.train.AdamOptimizer().minimize(cost)
         #accuracy
         with tf.name_scope('accuracy'):
-            y_pred = tf.greater(y, tf.constant(0.5))
+            y_pred = tf.greater(y, tf.constant(threshold))
             y2_pred = tf.greater(y2, tf.constant(0.5))
             correctness = tf.equal(y_pred, y2_pred)
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
@@ -713,9 +734,9 @@ with tf.Session() as sess:
                         ]
                     })
                     if useCoarseOnly:
-                        p[i][j] = out[0]
+                        p[i][j] = out[0] > threshold if thresholdGiven else out[0]
                     else:
-                        if out[0] > 0.5:
+                        if out[0] > threshold:
                             p[i][j] = -1
                         else:
                             out = y.eval(feed_dict={
@@ -777,15 +798,20 @@ with tf.Session() as sess:
         for i in range(NUM_SAMPLES[0]):
             for j in range(NUM_SAMPLES[1]):
                 inputs, outputs = prod.getBatch(1)
+                inputVals = inputs[0]*255 if useCoarseOnly else inputs[0] #adjust for normalisation
                 sampleImage = Image.fromarray(
-                    inputs[0].astype(np.uint8),
+                    inputVals.astype(np.uint8),
                     "RGB"
                 )
                 image.paste(
                     sampleImage,
                     (INPUT_WIDTH*i, INPUT_HEIGHT*j, INPUT_WIDTH*(i+1), INPUT_HEIGHT*(j+1))
                 )
-                if outputs[0][0] > 0.5:
+                if useCoarseOnly:
+                    isPositive = outputs[0][0] > threshold
+                else:
+                    isPositive = outputs[0][0] > outputs[0][1]
+                if isPositive:
                     draw.rectangle([
                         INPUT_WIDTH*i,
                         INPUT_HEIGHT*j,
