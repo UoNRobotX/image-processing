@@ -1,4 +1,4 @@
-import sys, os, math, random, time
+import sys, re, os, math, random, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import tensorflow as tf
@@ -18,6 +18,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] 
         run file1 [file2]
             Run coarse/detailed networks using input image 'file1'.
             The filter specified by 'file2' is used (if empty, no filter is used).
+            'file1' may be a directory, in which case .jpg files in it are used.
         samples file1 [file2]
             Generate input samples for the coarse/detailed network, using data from file 'f1'.
     For each action, the filter specified by 'file2' is used (default is 'filterData.txt')
@@ -42,8 +43,10 @@ usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] 
         -s n1
             With 'train' or 'test', specifies the number of steps done.
         -o img1
-            With 'run' or 'sampels', specifies the image file to create.
-            The defaults are 'output.jpg' and 'samples.jpg'.
+            With 'run' or 'samples', specifies the image file to create.
+                The defaults are 'output.jpg' and 'samples.jpg'.
+            With 'run', if 'file1' is a directory, this option specifies an output directory.
+                By default, for file1/x.jpg the output is file1/x_out.jpg.
         -t t1
             Affects the precision-recall tradeoff.
             With -c, a prediction confidence above t1 causes a positive predictions (default 0.5).
@@ -146,8 +149,6 @@ INPUT_HEIGHT         = 32
 INPUT_WIDTH          = 32
 INPUT_CHANNELS       = 3
 SAVE_FILE            = "modelData/model.ckpt" #save/load network values to/from here
-RUN_OUTPUT_IMAGE     = outputImg or "output.jpg"  #output image for 'run' action
-SAMPLES_OUTPUT_IMAGE = outputImg or "samples.jpg" #output image for 'sample' action
 TRAINING_STEPS       = numSteps
 TRAINING_BATCH_SIZE  = 50 #the number of inputs per training step
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
@@ -706,86 +707,114 @@ with tf.Session() as sess:
         summaryWriter.close()
     #running
     elif mode == MODE_RUN:
-        #obtain PIL image
-        image = Image.open(dataFile)
-        image_scaled = image.resize((IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT), resample=Image.LANCZOS)
-        #obtain numpy array
-        array = np.array(list(image_scaled.getdata())).astype(np.float32)
-        array = array.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
-        array = np.array([array])
-        #variable for storing results
-        p = [
-            [0 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH)]
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
-        ]
-        #get results
-        startTime = time.time()
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                if cellFilter != None and cellFilter[i][j] == 1:
-                    p[i][j] = -2
-                else:
-                    out = cy.eval(feed_dict={
-                        x: array[
-                            :,
-                            INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
-                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
-                            :
-                        ]
-                    })
-                    if useCoarseOnly:
-                        p[i][j] = out[0] > threshold if thresholdGiven else out[0]
+        #get input files
+        if os.path.isfile(dataFile):
+            filenames = [dataFile]
+            outputFile = outputImg or "output.jpg"
+        elif os.path.isdir(dataFile):
+            filenames = [
+                dataFile + "/" + name for
+                name in os.listdir(dataFile) if
+                os.path.isfile(dataFile + "/" + name) and re.fullmatch(r".*\.jpg", name)
+            ]
+            filenames.sort()
+            outputDir = outputImg or dataFile
+            if not os.path.exists(outputDir) or not os.path.isdir(outputDir):
+                print("Invalid output directory", file=sys.stderr)
+                sys.exit(1)
+            outputFilenames = [
+                re.sub(dataFile + "/(.*)\.jpg$", outputDir + "/\\1_out.jpg", n) for n in filenames
+            ]
+        else:
+            print("Invalid input file(s)", file=sys.stderr)
+            sys.exit(1)
+        #iterate through input images
+        for fileIdx in range(len(filenames)):
+            #obtain PIL image
+            image = Image.open(filenames[fileIdx])
+            image_scaled = image.resize((IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT), resample=Image.LANCZOS)
+            #obtain numpy array
+            array = np.array(list(image_scaled.getdata())).astype(np.float32)
+            array = array.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+            array = np.array([array])
+            #variable for storing results
+            p = [
+                [0 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH)]
+                for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
+            ]
+            #get results
+            startTime = time.time()
+            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    if cellFilter != None and cellFilter[i][j] == 1:
+                        p[i][j] = -2
                     else:
-                        if out[0] > threshold:
-                            p[i][j] = -1
+                        out = cy.eval(feed_dict={
+                            x: array[
+                                :,
+                                INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
+                                INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
+                                :
+                            ]
+                        })
+                        if useCoarseOnly:
+                            p[i][j] = out[0] > threshold if thresholdGiven else out[0]
                         else:
-                            out = y.eval(feed_dict={
-                                x: array[
-                                    :,
-                                    INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
-                                    INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
-                                    :
-                                ],
-                                p_dropout: 1.0
-                            })
-                            p[i][j] = out[0][0]
-        #write results to image file
-        draw = ImageDraw.Draw(image, "RGBA")
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                if p[i][j] >= 0:
-                    draw.rectangle([
-                        INPUT_WIDTH*IMG_DOWNSCALE*j,
-                        INPUT_HEIGHT*IMG_DOWNSCALE*i + int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j])),
-                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ], fill=(0,255,0,96))
-                elif p[i][j] == -1:
+                            if out[0] > threshold:
+                                p[i][j] = -1
+                            else:
+                                out = y.eval(feed_dict={
+                                    x: array[
+                                        :,
+                                        INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1),
+                                        INPUT_WIDTH*j:INPUT_WIDTH*(j+1),
+                                        :
+                                    ],
+                                    p_dropout: 1.0
+                                })
+                                p[i][j] = out[0][0]
+            #write results to image file
+            draw = ImageDraw.Draw(image, "RGBA")
+            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    if p[i][j] >= 0:
+                        draw.rectangle([
+                            INPUT_WIDTH*IMG_DOWNSCALE*j,
+                            INPUT_HEIGHT*IMG_DOWNSCALE*i + int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j])),
+                            INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                            INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                        ], fill=(0,255,0,96))
+                    elif p[i][j] == -1:
+                        draw.rectangle([
+                            INPUT_WIDTH*IMG_DOWNSCALE*j,
+                            INPUT_HEIGHT*IMG_DOWNSCALE*i,
+                            INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                            INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                        ], fill=(196,128,0,96))
+                    else:
+                        draw.rectangle([
+                            INPUT_WIDTH*IMG_DOWNSCALE*j,
+                            INPUT_HEIGHT*IMG_DOWNSCALE*i,
+                            INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                            INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                        ], fill=(196,0,0,96))
                     draw.rectangle([
                         INPUT_WIDTH*IMG_DOWNSCALE*j,
                         INPUT_HEIGHT*IMG_DOWNSCALE*i,
                         INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
                         INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ], fill=(196,128,0,96))
-                else:
-                    draw.rectangle([
-                        INPUT_WIDTH*IMG_DOWNSCALE*j,
-                        INPUT_HEIGHT*IMG_DOWNSCALE*i,
-                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ], fill=(196,0,0,96))
-                draw.rectangle([
-                    INPUT_WIDTH*IMG_DOWNSCALE*j,
-                    INPUT_HEIGHT*IMG_DOWNSCALE*i,
-                    INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                    INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                ], outline=(0,0,0,255))
-        image.save(RUN_OUTPUT_IMAGE)
-        #output time taken
-        print("%7.2f secs - output written to %s" % (time.time() - startTime, RUN_OUTPUT_IMAGE))
+                    ], outline=(0,0,0,255))
+            image.save(outputFilenames[fileIdx])
+            #output time taken
+            print(
+                "Time taken: %7.2f secs, image written to %s" %
+                (time.time() - startTime, outputFilenames[fileIdx])
+            )
     #sample generating
     elif mode == MODE_SAMPLES:
         NUM_SAMPLES = (20, 20)
+        if outputImg == None:
+            outputImg = "samples.jpg"
         if useCoarseOnly:
             prod = CoarseBatchProducer(dataFile, cellFilter)
         else:
@@ -819,10 +848,10 @@ with tf.Session() as sess:
                         INPUT_HEIGHT*(j+1),
                     ], fill=(0,255,0,64))
                     numPositive += 1
-        image.save(SAMPLES_OUTPUT_IMAGE)
+        image.save(outputImg)
         #output time taken
-        print("Time: %.2f secs" % (time.time() - startTime))
+        print("Time taken: %.2f secs" % (time.time() - startTime))
         print("Ratio of positive samples: %.2f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
-        print("Output written to %s" % SAMPLES_OUTPUT_IMAGE)
+        print("Output written to %s" % outputImg)
     #saving
     saver.save(sess, SAVE_FILE)
