@@ -154,7 +154,7 @@ else:
 #class for producing coarse network input values from a training/test data file
 class CoarseBatchProducer:
     "Produces input values for the coarse network"
-    VALUES_PER_IMAGE = 100
+    VALUES_PER_IMAGE = 300
     #constructor
     def __init__(self, dataFile, cellFilter):
         self.filenames = [] #list of image files
@@ -365,7 +365,7 @@ def createCoarseNetwork(x, y_):
         with tf.name_scope(layerName):
             with tf.name_scope('weights'):
                 w = tf.Variable(
-                    tf.truncated_normal([inSize, outSize], stddev=0.1)
+                    tf.truncated_normal([inSize, outSize], stddev=0.5)
                 )
                 variables.append(w)
                 #add summaries
@@ -395,12 +395,16 @@ def createCoarseNetwork(x, y_):
             x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
-        y = createLayer(
-            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 2, NET_NAME, 'output_layer', variables, summaries
+        h = createLayer(
+            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 30, NET_NAME, 'hidden_layer', variables, summaries
         )
+        y = createLayer(
+            h, 30, 1, NET_NAME, 'output_layer', variables, summaries
+        )
+        y2 = tf.slice(y_, [0, 0], [-1, 1])
         #cost
         with tf.name_scope('cost'):
-            cost = tf.reduce_mean(tf.square(y_ - y), reduction_indices=[1])
+            cost = tf.square(y2 - y)
             #add summary
             summaries.append(tf.scalar_summary(NET_NAME + '/cost', tf.reduce_mean(cost)))
         #optimizer
@@ -408,7 +412,7 @@ def createCoarseNetwork(x, y_):
             train = tf.train.GradientDescentOptimizer(0.5).minimize(cost)
         #accuracy
         with tf.name_scope('accuracy'):
-            correctness = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
+            correctness = tf.equal(tf.greater(y, tf.constant(0.5)), tf.greater(y2, tf.constant(0.5)))
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
             #add summary
             summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
@@ -561,7 +565,12 @@ with tf.Session() as sess:
                 feedDictAcc = feedDictDefaultsAcc.copy()
                 feedDictAcc.update({x: inputs, y_: outputs})
                 acc = accuracyNode.eval(feed_dict=feedDictAcc)
-                print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
+                #print("%7.2f secs - step %d, accuracy %g" % (time.time() - startTime, step, acc))
+                rps = (outputs.argmax(1) == 0).sum() / len(outputs) #num positive samples / num samples
+                print(
+                    "%7.2f secs - step %4d, accuracy %.2f, rps %.2f" %
+                    (time.time() - startTime, step, acc, rps)
+                )
             #occasionally save variable values
             if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
                 saver.save(sess, SAVE_FILE)
