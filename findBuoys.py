@@ -255,7 +255,6 @@ class CoarseBatchProducer:
             #cellImg = ImageOps.autocontrast(cellImg)
             #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
             data = np.array(list(cellImg.getdata())).astype(np.float32)
-            data = data/255 #normalize values
             data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
             inputs.append(data)
             #get an output
@@ -420,6 +419,7 @@ def createCoarseNetwork(x, y_):
     with tf.name_scope(NET_NAME):
         with tf.name_scope('input_reshape'):
             x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
+            x_flat = tf.div(x_flat, tf.constant(255.0)) #normalize values
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         h = createLayer(
@@ -807,7 +807,7 @@ with tf.Session() as sess:
             image.save(outputFilenames[fileIdx])
             #output time taken
             print(
-                "Time taken: %7.2f secs, image written to %s" %
+                "Time taken: %.2f secs, image written to %s" %
                 (time.time() - startTime, outputFilenames[fileIdx])
             )
     #sample generating
@@ -827,9 +827,8 @@ with tf.Session() as sess:
         for i in range(NUM_SAMPLES[0]):
             for j in range(NUM_SAMPLES[1]):
                 inputs, outputs = prod.getBatch(1)
-                inputVals = inputs[0]*255 if useCoarseOnly else inputs[0] #adjust for normalisation
                 sampleImage = Image.fromarray(
-                    inputVals.astype(np.uint8),
+                    inputs[0].astype(np.uint8),
                     "RGB"
                 )
                 image.paste(
