@@ -418,15 +418,17 @@ def createCoarseNetwork(x, y_):
     variables = []
     with tf.name_scope(NET_NAME):
         with tf.name_scope('input_reshape'):
-            x_flat = tf.reshape(x, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
+            x_flat = x
+            #x_flat = tf.reduce_mean(x, 3) #RGB -> grayscale (need to adjust sizes below accordingly)
+            x_flat = tf.reshape(x_flat, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
             x_flat = tf.div(x_flat, tf.constant(255.0)) #normalize values
             #add summary
             summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
         h = createLayer(
-            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 10, NET_NAME, 'hidden_layer', variables, summaries
+            x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 30, NET_NAME, 'hidden_layer', variables, summaries
         )
         y = createLayer(
-            h, 10, 1, NET_NAME, 'output_layer', variables, summaries
+            h, 30, 1, NET_NAME, 'output_layer', variables, summaries
         )
         #y = createLayer(
         #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 1, NET_NAME, 'output_layer', variables, summaries
