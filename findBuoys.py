@@ -419,7 +419,10 @@ def createCoarseNetwork(x, y_):
     with tf.name_scope(NET_NAME):
         with tf.name_scope('input_reshape'):
             x_flat = x
-            #x_flat = tf.reduce_mean(x, 3) #RGB -> grayscale (need to adjust sizes below accordingly)
+            grayscale = True #RGB -> grayscale
+            if grayscale:
+                x_flat = tf.reduce_mean(x, 3)
+                INPUT_CHANNELS = 1
             x_flat = tf.reshape(x_flat, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
             x_flat = tf.div(x_flat, tf.constant(255.0)) #normalize values
             #add summary
@@ -712,7 +715,7 @@ with tf.Session() as sess:
         #get input files
         if os.path.isfile(dataFile):
             filenames = [dataFile]
-            outputFile = outputImg or "output.jpg"
+            outputFilenames = [outputImg or "output.jpg"]
         elif os.path.isdir(dataFile):
             filenames = [
                 dataFile + "/" + name for
