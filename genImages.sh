@@ -6,14 +6,15 @@ if [[ ! -d images ]]; then
 fi
 
 #generate images
-ffmpeg -ss  0 -i videos/Course\ B\ Cam1.mp4 -r 0.05 images/cb1_%03d.jpg
-ffmpeg -ss  5 -i videos/Course\ B\ Cam2.mp4 -r 0.05 images/cb2_%03d.jpg
-ffmpeg -ss 10 -i videos/Course\ B\ Cam3.mp4 -r 0.05 images/cb3_%03d.jpg
-ffmpeg -ss 15 -i videos/Course\ B\ Cam4.mp4 -r 0.05 images/cb4_%03d.jpg
-ffmpeg -ss  0 -i videos/Not\ Sure\ Cam1.mp4 -r 0.05 images/ns1_%03d.jpg
-ffmpeg -ss  5 -i videos/Not\ Sure\ Cam2.mp4 -r 0.05 images/ns2_%03d.jpg
-ffmpeg -ss 10 -i videos/Not\ Sure\ Cam3.mp4 -r 0.05 images/ns3_%03d.jpg
-ffmpeg -ss 15 -i videos/Not\ Sure\ Cam4.mp4 -r 0.05 images/ns4_%03d.jpg
+ffmpeg -ss  00:20 -i videos/Course\ B\ Cam1.mp4 -r 1 -t 01:17 -qscale 5 images/cb1_1_%03d.jpg
+ffmpeg -ss  01:51 -i videos/Course\ B\ Cam1.mp4 -r 1 -t 00:10 -qscale 5 images/cb1_2_%03d.jpg
+ffmpeg -ss  02:35 -i videos/Course\ B\ Cam1.mp4 -r 1 -t 00:10 -qscale 5 images/cb1_3_%03d.jpg
+ffmpeg -ss  01:40 -i videos/Course\ B\ Cam2.mp4 -r 1 -t 00:20 -qscale 5 images/cb2_1_%03d.jpg
+ffmpeg -ss  02:43 -i videos/Course\ B\ Cam2.mp4 -r 1 -t 00:11 -qscale 5 images/cb2_2_%03d.jpg
+ffmpeg -ss  01:40 -i videos/Course\ B\ Cam3.mp4 -r 1 -t 00:20 -qscale 5 images/cb3_1_%03d.jpg
+ffmpeg -ss  02:43 -i videos/Course\ B\ Cam3.mp4 -r 1 -t 00:11 -qscale 5 images/cb3_2_%03d.jpg
+ffmpeg -ss  01:51 -i videos/Course\ B\ Cam4.mp4 -r 1 -t 00:10 -qscale 5 images/cb4_1_%03d.jpg
+ffmpeg -ss  04:48 -i videos/Course\ B\ Cam4.mp4 -r 1 -t 00:21 -qscale 5 images/cb4_2_%03d.jpg
 
 #rename images to 001.jpg, 002.jpg, ...
 cd images
