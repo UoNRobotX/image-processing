@@ -8,7 +8,7 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l
         Leading and trailing whitespace, empty names, and names with commas, are ignored.
 
     Each image is displayed, and the user may mark them using the mouse.
-    Pressing enter causes the next image to be displayed.
+    Pressing right/left causes the next/previous image to be displayed.
     Information about the images and boxes is written to stdout.
 
     At least one of -f, -w, or -b should be given.
@@ -285,7 +285,7 @@ def setupMarkCell(markFilter):
             markWaterEscapeCallback(None)
     def markWaterPrevCallback(event):
         markWaterNextCallback(None, forward=False)
-    def markFilterEscapeCallback(event):
+    def markFilterEscapeCallback(event=None):
         #output filter info
         f = sys.stdout if outputFile == None else open(outputFile, 'w')
         for row in range(len(cells[0])):
@@ -318,7 +318,7 @@ def setupMarkCell(markFilter):
                             )
                 image.save(outputDir + "/" + os.path.basename(filename))
         sys.exit(0)
-    def markWaterEscapeCallback(event):
+    def markWaterEscapeCallback(event=None):
         #store info
         if filenameIdx < len(filenamesSorted):
             info = [
@@ -381,6 +381,7 @@ def setupMarkCell(markFilter):
         window.bind("<Right>", markFilterNextCallback)
         window.bind("<Left>", markFilterPrevCallback)
         window.bind("<Escape>", markFilterEscapeCallback)
+        window.protocol("WM_DELETE_WINDOW", markFilterEscapeCallback)
     else:
         #load water cells if provided
         filename = filenamesSorted[0]
@@ -395,6 +396,7 @@ def setupMarkCell(markFilter):
         window.bind("<Right>", markWaterNextCallback)
         window.bind("<Left>", markWaterPrevCallback)
         window.bind("<Escape>", markWaterEscapeCallback)
+        window.protocol("WM_DELETE_WINDOW", markWaterEscapeCallback)
 def setupMarkBox():
     #handlers
     def resizeCallback(event):
@@ -504,7 +506,7 @@ def setupMarkBox():
             escapeCallback(None)
     def prevCallback(event):
         nextCallback(None, False)
-    def escapeCallback(event):
+    def escapeCallback(event=None):
         #store box info
         if filenameIdx < len(filenamesSorted):
             filenames[filenamesSorted[filenameIdx]] = boxCoords
@@ -558,6 +560,7 @@ def setupMarkBox():
     window.bind("<Right>", nextCallback)
     window.bind("<Left>", prevCallback)
     window.bind("<Escape>", escapeCallback)
+    window.protocol("WM_DELETE_WINDOW", escapeCallback)
 
 #setup
 if mode == MODE_FILTER or mode == MODE_WATER:
