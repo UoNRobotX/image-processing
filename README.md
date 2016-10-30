@@ -22,16 +22,16 @@
 
 ## Creating training/testing data.
 1. Label the grid cells to use for the filter (used to ignore camera boundaries, WAM-V 'roof', etc).
-    * `python3 markImages.py -f -d images > filterData.txt`
+    * `python3 markImages.py -f -d images -o filterData.txt`
 2. Label water grid cells (used to train/test coarse network).
-    * `python3 markImages.py -w -d images > data.txt`
+    * `python3 markImages.py -w -d images -o data.txt`
 3. Split the coarse network data into training and test sets.
     * `csplit data.txt '/075\.jpg/' -s`
     * `mv xx00 trainingDataCoarse.txt`
     * `mv xx01 testingDataCoarse.txt`
     * `rm data.txt`
 4. Label buoy boxes.
-    * `python3 markImages.py -b -d images > data.txt`
+    * `python3 markImages.py -b -d images -o data.txt`
 5. Split the data into training and test sets.
     * `csplit data.txt '/075\.jpg/' -s`
     * `mv xx00 trainingData.txt`
@@ -40,11 +40,11 @@
 
 ## Viewing the training/testing data.
 * View filter.
-    * `python3 showMarkedImages.py -f filterData.txt images`
+    * `python3 showMarkedImages.py -f -d images -l filterData.txt >/dev/null`
 * View labelled water grid cells.
-    * `python3 showMarkedImages.py -w trainingDataCoarse.txt`
+    * `python3 showMarkedImages.py -w -d images -l trainingDataCoarse.txt >/dev/null`
 * View labelled boxes.
-    * `python3 showMarkedImages.py -b trainingData.txt`
+    * `python3 showMarkedImages.py -b -d images -l trainingData.txt >/dev/null`
 
 ## Working with the coarse network.
 * Train the coarse network, for 100 steps.
