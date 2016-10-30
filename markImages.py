@@ -2,7 +2,7 @@ import sys, re, os
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l f1] [-s d1]
+usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l f1] [-g f1] [-s d1]
     Obtains a list of image filenames, specified by -d, or from stdin.
     If obtained from stdin, each line should contain a filename.
         Leading and trailing whitespace, empty names, and names with commas, are ignored.
@@ -41,6 +41,8 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l
                     A line ' 1,2,3,4' specifies a box with top-left at 1,2 and bottom-right at 3,4.
         -l f1
             Read markings from file f1, whose format should correspond to that expected by -f/-w/-b.
+        -g f1
+            Skip to file f1 in the list.
         -s d1
             Save the images, with markings, to directory d1.
 """
@@ -53,6 +55,7 @@ mode = None
 inputDir = None
 dataFile = None
 outputFile = None
+skipFile = None
 outputDir = None
 i = 1
 while i < len(sys.argv):
@@ -83,6 +86,13 @@ while i < len(sys.argv):
             dataFile = sys.argv[i]
         else:
             print("No argument for -l", file=sys.stderr)
+            sys.exit(1)
+    elif arg == "-g":
+        i += 1
+        if i < len(sys.argv):
+            skipFile = sys.argv[i]
+        else:
+            print("No argument for -g", file=sys.stderr)
             sys.exit(1)
     elif arg == "-s":
         i += 1
@@ -152,6 +162,15 @@ if dataFile != None:
 filenameIdx = 0
 filenamesSorted = [name for name in filenames]
 filenamesSorted.sort()
+if skipFile != None:
+    found = False
+    for i in range(len(filenamesSorted)):
+        if os.path.basename(filenamesSorted[i]) == skipFile:
+            filenameIdx = i
+            found = True
+    if not found:
+        print("Skip file not found", file=sys.stderr)
+        sys.exit(1)
 
 #variables
 DOWNSCALE     = 2
@@ -166,8 +185,8 @@ mouseDownCell = [0,0]        #[i,j], specifies the last cell the mouse was in wh
 
 #create window
 window = tkinter.Tk()
-window.title(filenamesSorted[0])
-image = Image.open(filenamesSorted[0])
+window.title(filenamesSorted[filenameIdx])
+image = Image.open(filenamesSorted[filenameIdx])
 image = image.resize((image.size[0]//DOWNSCALE, image.size[1]//DOWNSCALE), resample=Image.LANCZOS)
 canvasWidth = image.size[0]
 canvasHeight = image.size[1]
@@ -384,7 +403,7 @@ def setupMarkCell(markFilter):
         window.protocol("WM_DELETE_WINDOW", markFilterEscapeCallback)
     else:
         #load water cells if provided
-        filename = filenamesSorted[0]
+        filename = filenamesSorted[filenameIdx]
         if filenames[filename] != None:
             info = filenames[filename]
             for row in range(len(info)):
@@ -534,7 +553,7 @@ def setupMarkBox():
                     image.save(outputDir + "/" + os.path.basename(filename))
         sys.exit(0)
     #load boxes if present
-    filename = filenamesSorted[0]
+    filename = filenamesSorted[filenameIdx]
     if filenames[filename] != None:
         for box in filenames[filename]:
             boxCoords.append(box)
