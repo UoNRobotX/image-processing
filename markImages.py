@@ -320,11 +320,12 @@ def setupMarkCell(markFilter):
         sys.exit(0)
     def markWaterEscapeCallback(event):
         #store info
-        info = [
-            [0 if cells[col][row] == None else 1 for col in range(len(cells))]
-            for row in range(len(cells[0]))
-        ]
-        filenames[filenamesSorted[filenameIdx]] = info
+        if filenameIdx < len(filenamesSorted):
+            info = [
+                [0 if cells[col][row] == None else 1 for col in range(len(cells))]
+                for row in range(len(cells[0]))
+            ]
+            filenames[filenamesSorted[filenameIdx]] = info
         #output info
         f = sys.stdout if outputFile == None else open(outputFile, 'w')
         for filename in filenamesSorted:
@@ -423,6 +424,20 @@ def setupMarkBox():
         global box
         sel[1] = [event.x, event.y]
         canvas.delete(box)
+        #ignore if box is too small
+        MIN_SIZE = 5
+        if abs(sel[0][0] - sel[1][0]) < MIN_SIZE or abs(sel[0][1] - sel[1][1]) < MIN_SIZE:
+            return
+        #make 'sel' contain top-left and bottom-right
+        if sel[0][0] > sel[1][0]:
+            temp = sel[0][0]
+            sel[0][0] = sel[1][0]
+            sel[1][0] = temp
+        if sel[0][1] > sel[1][1]:
+            temp = sel[0][1]
+            sel[0][1] = sel[1][1]
+            sel[1][1] = temp
+        #add box
         boxIDs.append(
             canvas.create_rectangle(sel[0][0], sel[0][1], sel[1][0], sel[1][1])
         )
@@ -486,12 +501,13 @@ def setupMarkBox():
             canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
             canvas.tag_lower(canvasImage) #move image to back
         else:
-            escapeCallback()
+            escapeCallback(None)
     def prevCallback(event):
         nextCallback(None, False)
     def escapeCallback(event):
         #store box info
-        filenames[filenamesSorted[filenameIdx]] = boxCoords
+        if filenameIdx < len(filenamesSorted):
+            filenames[filenamesSorted[filenameIdx]] = boxCoords
         #output box info
         f = sys.stdout if outputFile == None else open(outputFile, 'w')
         for filename in filenamesSorted:
