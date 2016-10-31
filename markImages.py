@@ -2,7 +2,7 @@ import sys, re, os
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l f1] [-g f1] [-s d1]
+usage = "Usage: python3 " + sys.argv[0] + """ mode1 [-d d1] [-o f1] [-l f1] [-g f1] [-s d1]
     Obtains a list of image filenames, specified by -d, or from stdin.
     If obtained from stdin, each line should contain a filename.
         Leading and trailing whitespace, empty names, and names with commas, are ignored.
@@ -11,36 +11,35 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l
     Pressing right/left causes the next/previous image to be displayed.
     Information about the images and boxes is written to stdout.
 
-    At least one of -f, -w, or -b should be given.
-    If more than one is given, only the last is used.
+    'mode1' may be one of the following:
+        filter:
+            The user marks grid cells to be ignored (camera boundaries, roof, etc).
+            Clicking or dragging over a cell toggles whether it is marked.
+            The output contains lines for each row of cells, containing 0s and 1s.
+                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+        coarse:
+            The user marks grid cells that contain only water.
+            Clicking or dragging over a cell toggles whether it is marked.
+            The output contains sections, each describing cells to ignore for an image.
+                Each section starts with a line containing the image filename.
+                Each such line is followed by indented lines for each row, containing 0s and 1s.
+                    A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+        detailed
+            The user marks bounding boxes by clicking and dragging.
+            Boxes can be deleted by right-clicking.
+            The output contains lines holding image filenames.
+            The output contains sections, each describing boxes for an image.
+                Each section starts with a line containing the image filename.
+                Each such line is followed by indented lines, each specifying a bounding box.
+                    A line ' 1,2,3,4' specifies a box with top-left 1,2 and bottom-right 3,4.
 
     Options:
         -d d1
             Use .jpg files in directory d1 as the list of filenames.
         -o f1
             Write output to file f1 instead of to stdout.
-        -f
-            Mark grid cells that should always be ignored (camera boundaries, roof, etc).
-            Clicking or dragging over a cell toggles whether it is marked.
-            The output contains lines for each row of cells, containing 0s and 1s.
-                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
-        -w
-            Mark grid cells that contain only water.
-            Clicking or dragging over a cell toggles whether it is marked.
-            The output contains sections, each describing cells to ignore for an image.
-                Each section starts with a line containing the image filename.
-                    The line is followed by indented lines for each row, containing 0s and 1s.
-                    A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
-        -b
-            The user marks bounding boxes by clicking and dragging.
-            Boxes can be deleted by right-clicking.
-            The output contains lines holding image filenames.
-            The output contains sections, each describing boxes for an image.
-                Each section starts with a line containing the image filename.
-                    The line is followed by indented lines, each specifying a bounding box.
-                    A line ' 1,2,3,4' specifies a box with top-left at 1,2 and bottom-right at 3,4.
         -l f1
-            Read markings from file f1, whose format should correspond to that expected by -f/-w/-b.
+            Load data from file f1, whose format should correspond to that of the mode.
         -g f1
             Skip to file f1 in the list.
         -s d1
@@ -48,9 +47,6 @@ usage = "Usage: python3 " + sys.argv[0] + """ [-f] [-w] [-b] [-d d1] [-o f1] [-l
 """
 
 #process command line arguments
-MODE_FILTER = 0 # -f
-MODE_WATER  = 1 # -w
-MODE_BOXES  = 2 # -b
 mode = None
 inputDir = None
 dataFile = None
@@ -60,13 +56,7 @@ outputDir = None
 i = 1
 while i < len(sys.argv):
     arg = sys.argv[i]
-    if arg == "-f":
-        mode = MODE_FILTER
-    elif arg == "-w":
-        mode = MODE_WATER
-    elif arg == "-b":
-        mode = MODE_BOXES
-    elif arg == "-d":
+    if arg == "-d":
         i += 1
         if i < len(sys.argv):
             inputDir = sys.argv[i]
@@ -105,11 +95,14 @@ while i < len(sys.argv):
             print("No argument for -s", file=sys.stderr)
             sys.exit(1)
     else:
-        print(usage, file=sys.stderr)
-        sys.exit(1)
+        if arg == "filter" or arg == "coarse" or arg == "detailed":
+            mode = arg
+        else:
+            print("Invalid mode", file=sys.stderr)
+            sys.exit(1)
     i += 1
 if mode == None:
-    print("At least one of -f, -w, or -b should be given")
+    print("No specified mode", file=sys.stderr)
     sys.exit(1)
 
 #get input filenames
@@ -134,11 +127,11 @@ if len(filenames) == 0:
 cellFilter = None #contains loaded filter information
 if dataFile != None:
     with open(dataFile) as file:
-        if mode == MODE_FILTER:
+        if mode == "filter":
             cellFilter = []
             for line in file:
                 cellFilter.append([int(c) for c in line.strip()])
-        elif mode == MODE_WATER:
+        elif mode == "coarse":
             filename = None
             for line in file:
                 if line[0] != " ":
@@ -146,7 +139,7 @@ if dataFile != None:
                     filenames[filename] = []
                 else:
                     filenames[filename].append([int(c) for c in line.strip()])
-        elif mode == MODE_BOXES:
+        elif mode == "detailed":
             filename = None
             for line in file:
                 if line[0] != " ":
@@ -582,7 +575,7 @@ def setupMarkBox():
     window.protocol("WM_DELETE_WINDOW", escapeCallback)
 
 #setup
-if mode == MODE_FILTER or mode == MODE_WATER:
+if mode == "filter" or mode == "coarse":
     #initialise cells
     cells = [
         [None for row in range(image.size[1]//INPUT_HEIGHT)]
@@ -600,8 +593,8 @@ if mode == MODE_FILTER or mode == MODE_WATER:
                 )
             )
     #setup handlers
-    setupMarkCell(mode == MODE_FILTER)
-elif mode == MODE_BOXES:
+    setupMarkCell(mode == "filter")
+elif mode == "detailed":
     setupMarkBox()
 
 #start application

@@ -350,7 +350,6 @@ class BatchProducer:
                 #cellImg = ImageOps.autocontrast(cellImg)
                 #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 data = np.array(list(cellImg.getdata())).astype(np.float32)
-                #data = data/255 #normalize values
                 data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
                 potentialInputs.append(data)
                 #get an output

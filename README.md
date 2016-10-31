@@ -22,16 +22,16 @@
 
 ## Creating training/testing data.
 1. Label the grid cells to use for the filter (used to ignore camera boundaries, WAM-V 'roof', etc).
-    * `python3 markImages.py -f -d images -o filterData.txt`
+    * `python3 markImages.py filter -d images -o filterData.txt`
 2. Label water grid cells (used to train/test coarse network).
-    * `python3 markImages.py -w -d images -o data.txt`
+    * `python3 markImages.py coarse -d images -o data.txt`
 3. Split the coarse network data into training and test sets.
     * `csplit data.txt '/125\.jpg/' -s`
     * `mv xx00 trainingDataCoarse.txt`
     * `mv xx01 testingDataCoarse.txt`
     * `rm data.txt`
 4. Label buoy boxes.
-    * `python3 markImages.py -b -d images -o data.txt`
+    * `python3 markImages.py detailed -d images -o data.txt`
 5. Split the data into training and test sets.
     * `csplit data.txt '/125\.jpg/' -s`
     * `mv xx00 trainingData.txt`
