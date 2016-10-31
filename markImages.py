@@ -45,7 +45,6 @@ parser.add_argument("-l", dest="loadFile",   help="Load mark data from a file.")
 parser.add_argument("-g", dest="skipFile",   help="Skip to file f1 in the list.")
 parser.add_argument("-s", dest="saveDir",    help="Save the images, with markings, to a directory.")
 args = parser.parse_args()
-sys.exit(0)
 #set variables from command line arguments
 mode       = args.mode
 inputDir   = args.inputDir
