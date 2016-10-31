@@ -13,12 +13,12 @@ description = """
     By default, information about the markings is written to stdout.
 
     'mode1' may be one of the following:
-        filter:
+        filter
             The user marks grid cells to be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether it is marked.
             The output contains a line for each row of cells.
                 " 0111" specifies 4 cells of a row, 3 of which are marked.
-        coarse:
+        coarse
             The user marks grid cells that contain only water.
             Clicking or dragging over a cell toggles whether it is marked.
             The output contains sections, each describing cells to ignore for an image.
@@ -72,4 +72,4 @@ if len(fileMarks) == 0:
     raise Exception("No input files")
 
 #create window
-markImages_window.createWindow(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir)
+window = markImages_window.Window(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir)

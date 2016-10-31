@@ -2,163 +2,316 @@ import sys, os
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-def createWindow(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir):
-    #constants
-    DOWNSCALE     = 2  #downscale images, as done in the coarse/detailed networks
-    INPUT_HEIGHT  = 32 #coarse/detailed network input height size
-    INPUT_WIDTH   = 32
-    #variables used when traversing the file list
-    fileIdx       = 0
-    filenames     = [name for name in fileMarks]
-    filenames.sort()
-    #variables used to hold mark data
-    sel           = [[0,0], [0,0]] #holds corner positions of a box created while dragging the mouse
-    box           = None           #holds the ID of a rectangle shown while dragging the mouse
-    boxCoords     = []             #[[x,y,x,y], ...], describes created bounding boxes or grid cells
-    boxIDs        = []             #holds IDs of elements in 'boxCoords'
-    cells         = []             #cells[col][row] is an ID or None, indicating if a cell is marked
-    mouseDownCell = [0, 0]         #specifies the last cell the mouse was in while held down
-    #skip to a file if requested
-    if skipFile != None:
-        found = False
-        for i in range(len(filenames)):
-            if os.path.basename(filenames[i]) == skipFile:
-                fileIdx = i
-                found = True
-        if not found:
-            raise Exception("Skip file not found")
-    #create window
-    window = tkinter.Tk()
-    window.title(filenames[fileIdx])
-    image = Image.open(filenames[fileIdx])
-    image = image.resize((image.size[0]//DOWNSCALE, image.size[1]//DOWNSCALE), resample=Image.LANCZOS)
-    canvasWidth = image.size[0]
-    canvasHeight = image.size[1]
-    canvas = tkinter.Canvas(window, width=canvasWidth, height=canvasHeight)
-    canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
-    imageTk = ImageTk.PhotoImage(image)
-    canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-    #handler setup functions
-    def setupMarkCell(markFilter):
-        #helper functions
-        def toggleCell(i, j): #toggle marked-ness of cell i-j
-            if cells[i][j] != None:
-                canvas.delete(cells[i][j])
-                cells[i][j] = None
-            else:
-                wscale = canvasWidth/image.size[0]
-                hscale = canvasHeight/image.size[1]
-                cells[i][j] = canvas.create_rectangle(
-                    i * INPUT_WIDTH  * wscale,
-                    j * INPUT_HEIGHT * hscale,
-                    (i + 1) * INPUT_WIDTH  * wscale,
-                    (j + 1) * INPUT_HEIGHT * hscale,
-                    fill="green",
-                    stipple="gray50"
-                )
-        #handlers
-        def resizeCallback(event):
-            nonlocal canvasWidth, canvasHeight, imageTk, canvasImage
-            wscale = event.width/canvasWidth
-            hscale = event.height/canvasHeight
-            canvasWidth = event.width
-            canvasHeight = event.height
-            canvas.config(width=canvasWidth, height=canvasHeight)
-            canvas.scale("all", 0, 0, wscale, hscale)
-            canvas.delete(canvasImage)
-            imageTk = ImageTk.PhotoImage(
-                image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
-            )
-            canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-            canvas.tag_lower(canvasImage) #move image to back
-        def clickCallback(event):
-            nonlocal mouseDownCell
-            wscale = image.size[0]/canvasWidth
-            hscale = image.size[1]/canvasHeight
-            i = int(event.x * wscale) // INPUT_WIDTH
-            j = int(event.y * hscale) // INPUT_HEIGHT
-            mouseDownCell[:] = [i, j]
-            toggleCell(i,j)
-        def moveCallback(event):
-            #do nothing if mouse is outside window
-            if event.x < 0 or event.x > canvasWidth-1 or event.y < 0 or event.y > canvasHeight-1:
-                return
-            wscale = image.size[0]/canvasWidth
-            hscale = image.size[1]/canvasHeight
-            i = int(event.x * wscale) // INPUT_WIDTH
-            j = int(event.y * hscale) // INPUT_HEIGHT
-            if i != mouseDownCell[0] or j != mouseDownCell[1]:
-                mouseDownCell[:] = [i, j]
-                toggleCell(i,j)
-        def markFilterNextCallback(event, forward=True):
-            nonlocal fileIdx, image, imageTk, canvasImage, cells
-            #move to next file, or exit
-            fileIdx = fileIdx+1 if forward else max(fileIdx-1, 0)
-            if fileIdx < len(filenames):
-                window.title(filenames[fileIdx]) #rename window
-                #load new image
-                canvas.delete(canvasImage)
-                image = Image.open(filenames[fileIdx])
-                image = image.resize((image.size[0]//DOWNSCALE, image.size[1]//DOWNSCALE), resample=Image.LANCZOS)
-                imageTk = ImageTk.PhotoImage(
-                    image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
-                )
-                canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-                canvas.tag_lower(canvasImage) #move image to back
-            else:
-                markWaterEscapeCallback(None)
-        def markFilterPrevCallback(event):
-            markFilterNextCallback(None, forward=False)
-        def markWaterNextCallback(event, forward=True):
-            nonlocal fileIdx, image, imageTk, canvasImage, cells
-            #store info
-            info = [
-                [0 if cells[col][row] == None else 1 for col in range(len(cells))]
-                for row in range(len(cells[0]))
+#constants
+DOWNSCALE    = 2  #downscale images, as done in the coarse/detailed networks
+INPUT_HEIGHT = 32 #coarse/detailed network input height size
+INPUT_WIDTH  = 32
+
+class Window:
+    #constructor
+    def __init__(self, mode, skipFile, cellFilter, fileMarks, outputFile, saveDir):
+        self.mode       = mode
+        self.cellFilter = cellFilter
+        self.fileMarks  = fileMarks
+        self.outputFile = outputFile
+        self.saveDir    = saveDir
+        #fields used when traversing the file list
+        self.fileIdx   = 0
+        self.filenames = None
+        self.filenames = [name for name in fileMarks]
+        self.filenames.sort()
+        #fields used to hold mark data
+        self.sel           = [[0,0], [0,0]] #corner positions of a box created while dragging the mouse
+        self.box           = None   #holds the ID of a rectangle shown while dragging the mouse
+        self.boxCoords     = []     #[[x,y,x,y], ...], describes created boxes or marked cells
+        self.boxIDs        = []     #holds IDs of elements in 'boxCoords'
+        self.cells         = []     #cells[col][row] is an ID or None, indicating cell marked-ness
+        self.mouseDownCell = [0, 0] #specifies the last cell the mouse was in while held down
+        #skip to a file if requested
+        if skipFile != None:
+            found = False
+            for i in range(len(self.filenames)):
+                if os.path.basename(self.filenames[i]) == skipFile:
+                    self.fileIdx = i
+                    found = True
+            if not found:
+                raise Exception("Skip file not found")
+        #create window
+        self.window = tkinter.Tk()
+        self.window.title(self.filenames[self.fileIdx])
+        #obtain image, and downscale it
+        self.image = Image.open(self.filenames[self.fileIdx])
+        self.image = self.image.resize(
+            (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+            resample=Image.LANCZOS
+        )
+        #create canvas, and add the image to it
+        self.canvasWidth = self.image.size[0]
+        self.canvasHeight = self.image.size[1]
+        self.canvas = tkinter.Canvas(
+            self.window, width=self.canvasWidth, height=self.canvasHeight
+        )
+        self.canvas.pack(fill=tkinter.BOTH, expand=tkinter.YES)
+        self.imageTk = ImageTk.PhotoImage(self.image)
+        self.canvasImage = self.canvas.create_image(
+            self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+        )
+        #setup
+        if mode == "filter" or mode == "coarse":
+            #initialise cells
+            self.cells = [
+                [None for row in range(self.image.size[1]//INPUT_HEIGHT)]
+                for col in range(self.image.size[0]//INPUT_WIDTH)
             ]
-            fileMarks[filenames[fileIdx]] = info
-            #move to next file, or exit
-            fileIdx = fileIdx+1 if forward else max(fileIdx-1, 0)
-            if fileIdx < len(filenames):
-                filename = filenames[fileIdx]
-                window.title(filename) #rename window
-                #remove colored boxes
-                for i in range(len(cells)):
-                    for j in range(len(cells[i])):
-                        canvas.delete(cells[i][j])
-                        cells[i][j] = None
-                #load colored boxes if present
-                if fileMarks[filename] != None:
-                    info = fileMarks[filename]
-                    for row in range(len(info)):
-                        for col in range(len(info[0])):
-                            if info[row][col] == 1:
-                                toggleCell(col, row)
-                #load new image
-                canvas.delete(canvasImage)
-                image = Image.open(filename)
-                image = image.resize((image.size[0]//DOWNSCALE, image.size[1]//DOWNSCALE), resample=Image.LANCZOS)
-                imageTk = ImageTk.PhotoImage(
-                    image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
-                )
-                canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-                canvas.tag_lower(canvasImage) #move image to back
+            #create cell outlines
+            for i in range(len(self.cells)):
+                for j in range(len(self.cells[0])):
+                    self.boxIDs.append(
+                        self.canvas.create_rectangle(
+                            i*INPUT_WIDTH,
+                            j*INPUT_HEIGHT,
+                            (i+1)*INPUT_WIDTH,
+                            (j+1)*INPUT_HEIGHT
+                        )
+                    )
+            #setup handlers
+            if mode == "filter":
+                self.setupMarkFilter()
             else:
-                markWaterEscapeCallback(None)
-        def markWaterPrevCallback(event):
-            markWaterNextCallback(None, forward=False)
-        def markFilterEscapeCallback(event=None):
-            #output filter info
-            f = sys.stdout if outputFile == None else open(outputFile, 'w')
-            for row in range(len(cells[0])):
-                for col in range(len(cells)):
-                    print("0" if cells[col][row] == None else "1", end="", file=f)
-                print(file=f)
-            if not f is sys.stdout:
-                f.close()
-            #save images if requested
-            if saveDir != None:
-                for filename in filenames:
+                self.setupMarkCoarse()
+        elif mode == "detailed":
+            self.setupMarkDetailed()
+        #start application
+        tkinter.mainloop()
+    #setup functions
+    def setupMarkFilter(self):
+        #set handlers
+        self.canvas.bind("<Configure>", self.resizeCallback)
+        self.canvas.bind("<Button-1>",  self.markCellClickCallback)
+        self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
+        #load cell filter if provided
+        if self.cellFilter != None:
+            for row in range(len(self.cellFilter)):
+                for col in range(len(self.cellFilter[0])):
+                    if self.cellFilter[row][col] == 1:
+                        self.toggleCell(col, row)
+        #set more handlers
+        self.window.bind("<Return>", self.markFilterNextCallback)
+        self.window.bind("<Right>",  self.markFilterNextCallback)
+        self.window.bind("<Left>",   self.markFilterPrevCallback)
+        self.window.bind("<Escape>", self.markFilterEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.markFilterEscapeCallback)
+    def setupMarkCoarse(self):
+        #set handlers
+        self.canvas.bind("<Configure>", self.resizeCallback)
+        self.canvas.bind("<Button-1>",  self.markCellClickCallback)
+        self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
+        #load water cells if provided
+        if self.fileMarks[self.filenames[self.fileIdx]] != None:
+            info = self.fileMarks[self.filenames[self.fileIdx]]
+            for row in range(len(info)):
+                for col in range(len(info[0])):
+                    if info[row][col] == 1:
+                        self.toggleCell(col, row)
+        #set more handlers
+        self.window.bind("<Return>", self.markCoarseNextCallback)
+        self.window.bind("<Right>",  self.markCoarseNextCallback)
+        self.window.bind("<Left>",   self.markCoarsePrevCallback)
+        self.window.bind("<Escape>", self.markCoarseEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.markCoarseEscapeCallback)
+    def setupMarkDetailed(self):
+        #load boxes if present
+        filename = self.filenames[self.fileIdx]
+        if self.fileMarks[filename] != None:
+            for box in self.fileMarks[filename]:
+                self.boxCoords.append(box)
+                #convert to scaled image coordinates
+                wscale = self.canvasWidth /(self.image.size[0] * DOWNSCALE)
+                hscale = self.canvasHeight/(self.image.size[1] * DOWNSCALE)
+                #add box
+                self.boxIDs.append(
+                    self.canvas.create_rectangle(
+                        int(box[0] * wscale),
+                        int(box[1] * hscale),
+                        int(box[2] * wscale),
+                        int(box[3] * hscale)
+                    )
+                )
+        #set handlers
+        self.canvas.bind("<Configure>",       self.resizeCallback)
+        self.canvas.bind("<Button-1>",        self.markDetailedClickCallback)
+        self.canvas.bind("<B1-Motion>",       self.markDetailedMoveCallback)
+        self.canvas.bind("<ButtonRelease-1>", self.markDetailedReleaseCallback)
+        self.canvas.bind("<Button-3>",        self.markDetailedRightClickCallback)
+        self.window.bind("<Return>",          self.markDetailedNextCallback)
+        self.window.bind("<Right>",           self.markDetailedNextCallback)
+        self.window.bind("<Left>",            self.markDetailedPrevCallback)
+        self.window.bind("<Escape>",          self.markDetailedEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.markDetailedEscapeCallback)
+    #callback functions
+    def resizeCallback(self, event):
+        wscale = event.width /self.canvasWidth
+        hscale = event.height/self.canvasHeight
+        self.canvasWidth  = event.width
+        self.canvasHeight = event.height
+        self.canvas.config(width=self.canvasWidth, height=self.canvasHeight)
+        self.canvas.scale("all", 0, 0, wscale, hscale)
+        self.canvas.delete(self.canvasImage)
+        self.imageTk = ImageTk.PhotoImage(
+            self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+        )
+        self.canvasImage = self.canvas.create_image(
+            self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+        )
+        self.canvas.tag_lower(self.canvasImage) #move image to back
+    def markCellClickCallback(self, event):
+        wscale = self.image.size[0]/self.canvasWidth
+        hscale = self.image.size[1]/self.canvasHeight
+        i = int(event.x * wscale) // INPUT_WIDTH
+        j = int(event.y * hscale) // INPUT_HEIGHT
+        self.mouseDownCell = [i, j]
+        self.toggleCell(i,j)
+    def markCellMoveCallback(self, event):
+        #do nothing if mouse is outside window
+        if event.x < 0 or event.x > self.canvasWidth-1 \
+            or event.y < 0 or event.y > self.canvasHeight-1:
+            return
+        #if a new cell was moved to, toggle it
+        wscale = self.image.size[0]/self.canvasWidth
+        hscale = self.image.size[1]/self.canvasHeight
+        i = int(event.x * wscale) // INPUT_WIDTH
+        j = int(event.y * hscale) // INPUT_HEIGHT
+        if i != self.mouseDownCell[0] or j != self.mouseDownCell[1]:
+            self.mouseDownCell = [i, j]
+            self.toggleCell(i,j)
+    def markFilterNextCallback(self, event, forward=True):
+        #move to next file, or exit
+        if forward:
+            self.fileIdx += 1
+        else:
+            self.fileIdx = max(self.fileIdx-1, 0)
+        if self.fileIdx < len(self.filenames):
+            self.window.title(self.filenames[self.fileIdx]) #rename window
+            #load new image
+            self.canvas.delete(self.canvasImage)
+            self.image = Image.open(self.filenames[self.fileIdx])
+            self.image = self.image.resize(
+                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                resample=Image.LANCZOS
+            )
+            self.imageTk = ImageTk.PhotoImage(
+                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+            )
+            self.canvasImage = self.canvas.create_image(
+                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+            )
+            self.canvas.tag_lower(self.canvasImage) #move image to back
+        else:
+            self.markFilterEscapeCallback(None)
+    def markCoarseNextCallback(self, event, forward=True):
+        #store mark info
+        self.fileMarks[self.filenames[self.fileIdx]] = [
+            [0 if self.cells[col][row] == None else 1 for col in range(len(self.cells))]
+            for row in range(len(self.cells[0]))
+        ]
+        #move to next file, or exit
+        if forward:
+            self.fileIdx += 1
+        else:
+            self.fileIdx = max(self.fileIdx-1, 0)
+        if self.fileIdx < len(self.filenames):
+            filename = self.filenames[self.fileIdx]
+            self.window.title(filename) #rename window
+            #remove colored boxes
+            for i in range(len(self.cells)):
+                for j in range(len(self.cells[i])):
+                    self.canvas.delete(self.cells[i][j])
+                    self.cells[i][j] = None
+            #load colored boxes if present
+            if self.fileMarks[filename] != None:
+                info = self.fileMarks[filename]
+                for row in range(len(info)):
+                    for col in range(len(info[0])):
+                        if info[row][col] == 1:
+                            self.toggleCell(col, row)
+            #load new image
+            self.canvas.delete(self.canvasImage)
+            self.image = Image.open(filename)
+            self.image = self.image.resize(
+                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                resample=Image.LANCZOS
+            )
+            self.imageTk = ImageTk.PhotoImage(
+                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+            )
+            self.canvasImage = self.canvas.create_image(
+                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+            )
+            self.canvas.tag_lower(self.canvasImage) #move image to back
+        else:
+            self.markCoarseEscapeCallback(None)
+    def markFilterPrevCallback(self, event):
+        self.markFilterNextCallback(None, forward=False)
+    def markCoarsePrevCallback(self, event):
+        self.markCoarseNextCallback(None, forward=False)
+    def markFilterEscapeCallback(self, event=None):
+        #output filter info
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        for row in range(len(self.cells[0])):
+            for col in range(len(self.cells)):
+                print("0" if self.cells[col][row] == None else "1", end="", file=f)
+            print(file=f)
+        if not f is sys.stdout:
+            f.close()
+        #save images if requested
+        if self.saveDir != None:
+            for filename in self.filenames:
+                image = Image.open(filename)
+                draw = ImageDraw.Draw(image, "RGBA")
+                for i in range(image.size[0]//DOWNSCALE//INPUT_WIDTH):
+                    for j in range(image.size[1]//DOWNSCALE//INPUT_HEIGHT):
+                        topLeftX = i * INPUT_WIDTH * DOWNSCALE
+                        topLeftY = j * INPUT_HEIGHT * DOWNSCALE
+                        bottomRightX = (i+1) * INPUT_WIDTH  * DOWNSCALE - 1
+                        bottomRightY = (j+1) * INPUT_HEIGHT * DOWNSCALE - 1
+                        #draw grid box
+                        draw.rectangle(
+                            [topLeftX, topLeftY, bottomRightX, bottomRightY],
+                            outline=(0,0,0)
+                        )
+                        #draw marking
+                        if self.cells[i][j] != None:
+                            draw.rectangle(
+                                [topLeftX, topLeftY, bottomRightX, bottomRightY],
+                                fill=(0,128,0,128)
+                            )
+                image.save(self.saveDir + "/" + os.path.basename(filename))
+        sys.exit(0)
+    def markCoarseEscapeCallback(self, event=None):
+        #store info
+        if self.fileIdx < len(self.filenames):
+            self.fileMarks[self.filenames[self.fileIdx]] = [
+                [0 if self.cells[col][row] == None else 1 for col in range(len(self.cells))]
+                for row in range(len(self.cells[0]))
+            ]
+        #output info
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        for filename in self.filenames:
+            if self.fileMarks[filename] != None:
+                print(filename, file=f)
+                info = self.fileMarks[filename]
+                for row in range(len(info)):
+                    print(" ", end="", file=f)
+                    for col in range(len(info[row])):
+                        print("0" if info[row][col] == 0 else "1", end="", file=f)
+                    print(file=f)
+        if not f is sys.stdout:
+            f.close()
+        #save images if requested
+        if self.saveDir != None:
+            for filename in self.filenames:
+                info = self.fileMarks[filename]
+                if info != None:
                     image = Image.open(filename)
                     draw = ImageDraw.Draw(image, "RGBA")
                     for i in range(image.size[0]//DOWNSCALE//INPUT_WIDTH):
@@ -173,277 +326,155 @@ def createWindow(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir):
                                 outline=(0,0,0)
                             )
                             #draw marking
-                            if cells[i][j] != None:
+                            if info[j][i] == 1:
                                 draw.rectangle(
                                     [topLeftX, topLeftY, bottomRightX, bottomRightY],
                                     fill=(0,128,0,128)
                                 )
-                    image.save(saveDir + "/" + os.path.basename(filename))
-            sys.exit(0)
-        def markWaterEscapeCallback(event=None):
-            #store info
-            if fileIdx < len(filenames):
-                info = [
-                    [0 if cells[col][row] == None else 1 for col in range(len(cells))]
-                    for row in range(len(cells[0]))
-                ]
-                fileMarks[filenames[fileIdx]] = info
-            #output info
-            f = sys.stdout if outputFile == None else open(outputFile, 'w')
-            for filename in filenames:
-                if fileMarks[filename] != None:
-                    print(filename, file=f)
-                    info = fileMarks[filename]
-                    for row in range(len(info)):
-                        print(" ", end="", file=f)
-                        for col in range(len(info[row])):
-                            print("0" if info[row][col] == 0 else "1", end="", file=f)
-                        print(file=f)
-            if not f is sys.stdout:
-                f.close()
-            #save images if requested
-            if saveDir != None:
-                for filename in filenames:
-                    info = fileMarks[filename]
-                    if info != None:
-                        image = Image.open(filename)
-                        draw = ImageDraw.Draw(image, "RGBA")
-                        for i in range(image.size[0]//DOWNSCALE//INPUT_WIDTH):
-                            for j in range(image.size[1]//DOWNSCALE//INPUT_HEIGHT):
-                                topLeftX = i * INPUT_WIDTH * DOWNSCALE
-                                topLeftY = j * INPUT_HEIGHT * DOWNSCALE
-                                bottomRightX = (i+1) * INPUT_WIDTH  * DOWNSCALE - 1
-                                bottomRightY = (j+1) * INPUT_HEIGHT * DOWNSCALE - 1
-                                #draw grid box
-                                draw.rectangle(
-                                    [topLeftX, topLeftY, bottomRightX, bottomRightY],
-                                    outline=(0,0,0)
-                                )
-                                #draw marking
-                                if info[j][i] == 1:
-                                    draw.rectangle(
-                                        [topLeftX, topLeftY, bottomRightX, bottomRightY],
-                                        fill=(0,128,0,128)
-                                    )
-                        image.save(saveDir + "/" + os.path.basename(filename))
-            sys.exit(0)
-        #set handlers
-        canvas.bind("<Configure>", resizeCallback)
-        canvas.bind("<Button-1>", clickCallback)
-        canvas.bind("<B1-Motion>", moveCallback)
-        if markFilter:
-            #load cell filter if provided
-            if cellFilter != None:
-                for row in range(len(cellFilter)):
-                    for col in range(len(cellFilter[0])):
-                        if cellFilter[row][col] == 1:
-                            toggleCell(col, row)
-            #set more handlers
-            window.bind("<Return>", markFilterNextCallback)
-            window.bind("<Right>", markFilterNextCallback)
-            window.bind("<Left>", markFilterPrevCallback)
-            window.bind("<Escape>", markFilterEscapeCallback)
-            window.protocol("WM_DELETE_WINDOW", markFilterEscapeCallback)
+                    image.save(self.saveDir + "/" + os.path.basename(filename))
+        sys.exit(0)
+    def markDetailedClickCallback(self, event):
+        self.sel[0] = [event.x, event.y]
+    def markDetailedMoveCallback(self, event):
+        self.sel[1] = [event.x, event.y]
+        self.canvas.delete(self.box)
+        self.box = self.canvas.create_rectangle(
+            self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1], outline="red", width=2
+        )
+    def markDetailedReleaseCallback(self, event):
+        self.sel[1] = [event.x, event.y]
+        self.canvas.delete(self.box)
+        #ignore if box is too small
+        MIN_SIZE = 5
+        if abs(self.sel[0][0] - self.sel[1][0]) < MIN_SIZE or \
+            abs(self.sel[0][1] - self.sel[1][1]) < MIN_SIZE:
+            return
+        #make 'sel' contain top-left and bottom-right
+        if self.sel[0][0] > self.sel[1][0]:
+            temp = self.sel[0][0]
+            self.sel[0][0] = self.sel[1][0]
+            self.sel[1][0] = temp
+        if self.sel[0][1] > self.sel[1][1]:
+            temp = self.sel[0][1]
+            self.sel[0][1] = self.sel[1][1]
+            self.sel[1][1] = temp
+        #add box
+        self.boxIDs.append(
+            self.canvas.create_rectangle(
+                self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]
+            )
+        )
+        #convert to non-scaled image coordinates
+        wscale = (self.image.size[0] * DOWNSCALE)/self.canvasWidth
+        hscale = (self.image.size[1] * DOWNSCALE)/self.canvasHeight
+        self.sel[0][0] = int(self.sel[0][0] * wscale)
+        self.sel[0][1] = int(self.sel[0][1] * hscale)
+        self.sel[1][0] = int(self.sel[1][0] * wscale)
+        self.sel[1][1] = int(self.sel[1][1] * hscale)
+        #store bounding box
+        self.boxCoords.append([self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]])
+    def markDetailedRightClickCallback(self, event):
+        #convert click coordinate to non-scaled image coordinates
+        x = int(event.x * self.image.size[0]*DOWNSCALE/self.canvasWidth)
+        y = int(event.y * self.image.size[1]*DOWNSCALE/self.canvasHeight)
+        #find and remove overlapping boxes
+        indices = []
+        for i in range(len(self.boxCoords)):
+            b = self.boxCoords[i]
+            if b[0] <= x and b[1] <= y and b[2] >= x and b[3] >= y:
+                indices.append(i)
+                self.canvas.delete(self.boxIDs[i])
+        for i in indices:
+            self.boxCoords[i:i+1] = []
+            self.boxIDs[i:i+1] = []
+    def markDetailedNextCallback(self, event, forward=True):
+        #store box info
+        self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
+        #move to next file, or exit
+        if forward:
+            self.fileIdx += 1
         else:
-            #load water cells if provided
-            filename = filenames[fileIdx]
-            if fileMarks[filename] != None:
-                info = fileMarks[filename]
-                for row in range(len(info)):
-                    for col in range(len(info[0])):
-                        if info[row][col] == 1:
-                            toggleCell(col, row)
-            #set more handlers
-            window.bind("<Return>", markWaterNextCallback)
-            window.bind("<Right>", markWaterNextCallback)
-            window.bind("<Left>", markWaterPrevCallback)
-            window.bind("<Escape>", markWaterEscapeCallback)
-            window.protocol("WM_DELETE_WINDOW", markWaterEscapeCallback)
-    def setupMarkBox():
-        #handlers
-        def resizeCallback(event):
-            nonlocal canvasWidth, canvasHeight, imageTk, canvasImage
-            wscale = event.width/canvasWidth
-            hscale = event.height/canvasHeight
-            canvasWidth = event.width
-            canvasHeight = event.height
-            canvas.config(width=canvasWidth, height=canvasHeight)
-            canvas.scale("all", 0, 0, wscale, hscale)
-            canvas.delete(canvasImage)
-            imageTk = ImageTk.PhotoImage(
-                image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
-            )
-            canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-            canvas.tag_lower(canvasImage) #move image to back
-        def clickCallback(event):
-            sel[0] = [event.x, event.y]
-        def moveCallback(event):
-            nonlocal box
-            sel[1] = [event.x, event.y]
-            canvas.delete(box)
-            box = canvas.create_rectangle(
-                sel[0][0], sel[0][1], sel[1][0], sel[1][1], outline="red", width=2
-            )
-        def releaseCallback(event):
-            nonlocal box
-            sel[1] = [event.x, event.y]
-            canvas.delete(box)
-            #ignore if box is too small
-            MIN_SIZE = 5
-            if abs(sel[0][0] - sel[1][0]) < MIN_SIZE or abs(sel[0][1] - sel[1][1]) < MIN_SIZE:
-                return
-            #make 'sel' contain top-left and bottom-right
-            if sel[0][0] > sel[1][0]:
-                temp = sel[0][0]
-                sel[0][0] = sel[1][0]
-                sel[1][0] = temp
-            if sel[0][1] > sel[1][1]:
-                temp = sel[0][1]
-                sel[0][1] = sel[1][1]
-                sel[1][1] = temp
-            #add box
-            boxIDs.append(
-                canvas.create_rectangle(sel[0][0], sel[0][1], sel[1][0], sel[1][1])
-            )
-            #convert to non-scaled image coordinates
-            wscale = (image.size[0] * DOWNSCALE)/canvasWidth
-            hscale = (image.size[1] * DOWNSCALE)/canvasHeight
-            sel[0][0] = int(sel[0][0] * wscale)
-            sel[0][1] = int(sel[0][1] * hscale)
-            sel[1][0] = int(sel[1][0] * wscale)
-            sel[1][1] = int(sel[1][1] * hscale)
-            #store bounding box
-            boxCoords.append([sel[0][0], sel[0][1], sel[1][0], sel[1][1]])
-        def rightClickCallback(event):
-            #convert click coordinate to non-scaled image coordinates
-            x = int(event.x * image.size[0]*DOWNSCALE/canvasWidth)
-            y = int(event.y * image.size[1]*DOWNSCALE/canvasHeight)
-            #find and remove overlapping boxes
-            indices = []
-            for i in range(len(boxCoords)):
-                b = boxCoords[i]
-                if b[0] <= x and b[1] <= y and b[2] >= x and b[3] >= y:
-                    indices.append(i)
-                    canvas.delete(boxIDs[i])
-            for i in indices:
-                boxCoords[i:i+1] = []
-                boxIDs[i:i+1] = []
-        def nextCallback(event, forward=True):
-            nonlocal fileIdx, image, imageTk, boxCoords, boxIDs
-            #store box info
-            fileMarks[filenames[fileIdx]] = boxCoords
-            #move to next file, or exit
-            fileIdx = fileIdx+1 if forward else max(fileIdx-1, 0)
-            if fileIdx < len(filenames):
-                filename = filenames[fileIdx]
-                window.title(filename) #rename window
-                canvas.delete(tkinter.ALL) #remove image and boxes
-                boxIDs = []
-                boxCoords = []
-                #load boxes if present
-                if fileMarks[filename] != None:
-                    for box in fileMarks[filename]:
-                        boxCoords.append(box)
-                        #convert to scaled image coordinates
-                        wscale = canvasWidth /(image.size[0] * DOWNSCALE)
-                        hscale = canvasHeight/(image.size[1] * DOWNSCALE)
-                        #add box
-                        boxIDs.append(
-                            canvas.create_rectangle(
-                                int(box[0] * wscale),
-                                int(box[1] * hscale),
-                                int(box[2] * wscale),
-                                int(box[3] * hscale)
-                            )
+            self.fileIdx = max(self.fileIdx-1, 0)
+        if self.fileIdx < len(self.filenames):
+            filename = self.filenames[self.fileIdx]
+            self.window.title(filename) #rename window
+            self.canvas.delete(tkinter.ALL) #remove image and boxes
+            self.boxIDs = []
+            self.boxCoords = []
+            #load boxes if present
+            if self.fileMarks[filename] != None:
+                for box in self.fileMarks[filename]:
+                    self.boxCoords.append(box)
+                    #convert to scaled image coordinates
+                    wscale = self.canvasWidth /(self.image.size[0] * DOWNSCALE)
+                    hscale = self.canvasHeight/(self.image.size[1] * DOWNSCALE)
+                    #add box
+                    self.boxIDs.append(
+                        self.canvas.create_rectangle(
+                            int(box[0] * wscale),
+                            int(box[1] * hscale),
+                            int(box[2] * wscale),
+                            int(box[3] * hscale)
                         )
-                #load new image
-                image = Image.open(filenames[fileIdx])
-                image = image.resize((image.size[0]//DOWNSCALE, image.size[1]//DOWNSCALE), resample=Image.LANCZOS)
-                imageTk = ImageTk.PhotoImage(
-                    image.resize((canvasWidth, canvasHeight), resample=Image.LANCZOS)
-                )
-                canvasImage = canvas.create_image(canvasWidth//2, canvasHeight//2, image=imageTk)
-                canvas.tag_lower(canvasImage) #move image to back
-            else:
-                escapeCallback(None)
-        def prevCallback(event):
-            nextCallback(None, False)
-        def escapeCallback(event=None):
-            #store box info
-            if fileIdx < len(filenames):
-                fileMarks[filenames[fileIdx]] = boxCoords
-            #output box info
-            f = sys.stdout if outputFile == None else open(outputFile, 'w')
-            for filename in filenames:
-                if fileMarks[filename] != None:
-                    print(filename, file=f)
-                    for box in fileMarks[filename]:
-                        print(" ", end="", file=f)
-                        for coord in box[:-1]:
-                            print(str(coord) + ", ", end="", file=f)
-                        print(box[-1], file=f)
-            if not f is sys.stdout:
-                f.close()
-            #save images if requested
-            if saveDir != None:
-                for filename in filenames:
-                    info = fileMarks[filename]
-                    if info != None:
-                        image = Image.open(filename)
-                        draw = ImageDraw.Draw(image, "RGBA")
-                        for box in fileMarks[filename]:
-                            draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
-                        image.save(saveDir + "/" + os.path.basename(filename))
-            sys.exit(0)
-        #load boxes if present
-        filename = filenames[fileIdx]
-        if fileMarks[filename] != None:
-            for box in fileMarks[filename]:
-                boxCoords.append(box)
-                #convert to scaled image coordinates
-                wscale = canvasWidth /(image.size[0] * DOWNSCALE)
-                hscale = canvasHeight/(image.size[1] * DOWNSCALE)
-                #add box
-                boxIDs.append(
-                    canvas.create_rectangle(
-                        int(box[0] * wscale),
-                        int(box[1] * hscale),
-                        int(box[2] * wscale),
-                        int(box[3] * hscale)
                     )
-                )
-        #set handlers
-        canvas.bind("<Configure>", resizeCallback)
-        canvas.bind("<Button-1>", clickCallback)
-        canvas.bind("<B1-Motion>", moveCallback)
-        canvas.bind("<ButtonRelease-1>", releaseCallback)
-        canvas.bind("<Button-3>", rightClickCallback)
-        window.bind("<Return>", nextCallback)
-        window.bind("<Right>", nextCallback)
-        window.bind("<Left>", prevCallback)
-        window.bind("<Escape>", escapeCallback)
-        window.protocol("WM_DELETE_WINDOW", escapeCallback)
-    #setup
-    if mode == "filter" or mode == "coarse":
-        #initialise cells
-        cells = [
-            [None for row in range(image.size[1]//INPUT_HEIGHT)]
-            for col in range(image.size[0]//INPUT_WIDTH)
-        ]
-        #create cell outlines
-        for i in range(len(cells)):
-            for j in range(len(cells[0])):
-                boxIDs.append(
-                    canvas.create_rectangle(
-                        i*INPUT_WIDTH,
-                        j*INPUT_HEIGHT,
-                        (i+1)*INPUT_WIDTH,
-                        (j+1)*INPUT_HEIGHT
-                    )
-                )
-        #setup handlers
-        setupMarkCell(mode == "filter")
-    elif mode == "detailed":
-        setupMarkBox()
-    #start application
-    tkinter.mainloop()
+            #load new image
+            self.image = Image.open(self.filenames[self.fileIdx])
+            self.image = self.image.resize(
+                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                resample=Image.LANCZOS
+            )
+            self.imageTk = ImageTk.PhotoImage(
+                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+            )
+            self.canvasImage = self.canvas.create_image(
+                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+            )
+            self.canvas.tag_lower(self.canvasImage) #move image to back
+        else:
+            self.markDetailedEscapeCallback(None)
+    def markDetailedPrevCallback(self, event):
+        self.markDetailedNextCallback(None, False)
+    def markDetailedEscapeCallback(self, event=None):
+        #store box info
+        if self.fileIdx < len(self.filenames):
+            self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
+        #output box info
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        for filename in self.filenames:
+            if self.fileMarks[filename] != None:
+                print(filename, file=f)
+                for box in self.fileMarks[filename]:
+                    print(" ", end="", file=f)
+                    for coord in box[:-1]:
+                        print(str(coord) + ", ", end="", file=f)
+                    print(box[-1], file=f)
+        if not f is sys.stdout:
+            f.close()
+        #save images if requested
+        if self.saveDir != None:
+            for filename in self.filenames:
+                info = self.fileMarks[filename]
+                if info != None:
+                    image = Image.open(filename)
+                    draw = ImageDraw.Draw(image, "RGBA")
+                    for box in self.fileMarks[filename]:
+                        draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
+                    image.save(self.saveDir + "/" + os.path.basename(filename))
+        sys.exit(0)
+    #helper functions
+    def toggleCell(self, i, j): #toggle marked-ness of cell i-j
+        if self.cells[i][j] != None:
+            self.canvas.delete(self.cells[i][j])
+            self.cells[i][j] = None
+        else:
+            wscale = self.canvasWidth /self.image.size[0]
+            hscale = self.canvasHeight/self.image.size[1]
+            self.cells[i][j] = self.canvas.create_rectangle(
+                i * INPUT_WIDTH  * wscale,
+                j * INPUT_HEIGHT * hscale,
+                (i + 1) * INPUT_WIDTH  * wscale,
+                (j + 1) * INPUT_HEIGHT * hscale,
+                fill="green",
+                stipple="gray50"
+            )
+
