@@ -63,10 +63,12 @@
     * `python3 findBuoys.py train trainingData.txt filterData.txt -s 100`
 * Test the network.
     * `python3 findBuoys.py test testingData.txt filterData.txt`
-* View the results of running the network on an image. After running, a representation of the results is saved in outputFindBuoys.jpg.
-    * `python3 findBuoys.py run images/008.jpg filterData.txt`
-* View sample network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
-    * `python3 findBuoys.py samples trainingData.txt filterData.txt`
+* View the results of running the network on an image.
+    * `python3 findBuoys.py run images/076.jpg filterData.txt -o out.jpg`
+    * View out.jpg
+* View sample network inputs.
+    * `python3 findBuoys.py samples trainingData.txt filterData.txt -o out.jpg`
+    * View out.jpg
 
 ## Viewing graph and training/testing statistics with tensorboard.
 * The coarse or detailed network should have been trained or tested at least once.
