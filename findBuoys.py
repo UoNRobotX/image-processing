@@ -1,142 +1,70 @@
-import sys, re, os, math, random, time
+import sys, re, os, argparse, math, random, time
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageOps
 import tensorflow as tf
 
-usage = "Usage: python3 " + sys.argv[0] + """ cmd1 file1 [file2] [-cdn] [-s n1] [-o img1] [-t t1]
+#process command line arguments
+description = """
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist.
-    If neither -c nor -d is given, -d is assumed.
+    By default, the detailed network is operated on.
 
-    'cmd1' specifies an action:
-        train file1 [file2]
-            Train the coarse/detailed network, using training data from 'file1'.
-            The filter specified by 'file2' is used (if empty, no filter is used).
-        test file1 [file2]
-            Test coarse/detailed networks, using testing data from 'file1'.
-            The filter specified by 'file2' is used (if empty, no filter is used).
-        run file1 [file2]
-            Run coarse/detailed networks using input image 'file1'.
-            The filter specified by 'file2' is used (if empty, no filter is used).
-            'file1' may be a directory, in which case .jpg files in it are used.
-        samples file1 [file2]
-            Generate input samples for the coarse/detailed network, using data from file 'f1'.
-    For each action, the filter specified by 'file2' is used (default is 'filterData.txt')
-    If 'file2' is empty, no filter is used.
-
-    Options:
-        -c
-            With 'train', train the coarse network.
-            With 'test', test the coarse network, ignoring the detailed network.
-            With 'run', run the coarse network on the image, ignoring the detailed network.
-            With 'samples', generate inputs to the coarse network.
-            With -n, only re-initialise values for the coarse network.
-        -d
-            With 'train', train the detailed network.
-            With 'test', test the detailed network.
-            With 'run', run the detailed network on the image.
-            With 'samples', generate inputs to the detailed network.
-            With -n, only re-initialise values for the detailed network.
-            The coarse network is still used to filter input.
-        -n
-            Re-initialise values for the coarse/detailed network.
-        -s n1
-            With 'train' or 'test', specifies the number of steps done.
-        -o img1
-            With 'run' or 'samples', specifies the image file to create.
-                The defaults are 'output.jpg' and 'samples.jpg'.
-            With 'run', if 'file1' is a directory, this option specifies an output directory.
-                By default, for file1/x.jpg the output is file1/x_out.jpg.
-        -t t1
-            Affects the precision-recall tradeoff.
-            With -c, a prediction confidence above t1 causes a positive predictions (default 0.5).
-            With 'run', output cells predicted are fully colored, not partially colored by confidence.
+    'mode1' specifies an action:
+        train file1
+            Train the detailed (or coarse) network, using training data.
+        test file1
+            Test detailed (or coarse) network, using testing data.
+        run file1
+            Run the detailed (or coarse) network on an input image.
+                By default, the output is written to "out.jpg".
+            A directory may be specified, in which case JPG files in it are used.
+                By default, the outputs are written to same-name files.
+            Pre-existing files will not be replaced.
+        samples file1
+            Generate input samples for the detailed (or coarse) network.
+                By default, the output is written to "out.jpg".
+            Pre-existing files will not be replaced.
+    If operating on the detailed network, the coarse network is still used to filter input.
+    If 'file2' is present, it specifies a cell filter to use.
 """
-
-#process command line arguments
-MODE_TRAIN     = 0
-MODE_TEST      = 1
-MODE_RUN       = 2
-MODE_SAMPLES   = 3
-mode           = None
-useCoarseOnly  = False
-dataFile       = None
-filterFile     = None
-outputImg      = None
-reinitialise   = False
-threshold      = 0.5
-thresholdGiven = False
-numSteps = 100
-i = 1
-while i < len(sys.argv):
-    arg = sys.argv[i]
-    if arg == "-c":
-        useCoarseOnly = True
-    elif arg == "-d":
-        useCoarseOnly = False
-    elif arg == "-n":
-        reinitialise = True
-    elif arg == "-s":
-        i += 1
-        if i < len(sys.argv):
-            numSteps = int(sys.argv[i])
-            if numSteps <= 0:
-                print("Argument to -s must be positive")
-                sys.exit(1)
-        else:
-            print("No argument for -s", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-o":
-        i += 1
-        if i < len(sys.argv):
-            outputImg = sys.argv[i]
-        else:
-            print("No argument for -o", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-t":
-        i += 1
-        thresholdGiven = True
-        if i < len(sys.argv):
-            try:
-                threshold = float(sys.argv[i])
-                if threshold <= 0 or threshold >= 1:
-                    print("Out-of-range argument for -t", file=sys.stderr)
-                    sys.exit(1)
-            except ValueError:
-                print("Non-numeric argument for -t", file=sys.stderr)
-                sys.exit(1)
-        else:
-            print("No argument for -t", file=sys.stderr)
-            sys.exit(1)
-    else:
-        if mode == None:
-            if arg == "train":
-                mode = MODE_TRAIN
-            elif arg == "test":
-                mode = MODE_TEST
-            elif arg == "run":
-                mode = MODE_RUN
-            elif arg == "samples":
-                mode = MODE_SAMPLES
-            else:
-                print("Unrecognised action", file=sys.stderr)
-                sys.exit(1)
-        elif dataFile == None:
-            dataFile = arg
-        elif filterFile == None:
-            filterFile = arg
-        else:
-            print(usage)
-            sys.exit(1)
-    i += 1
-if mode == None:
-    print("No specified action", file=sys.stderr)
+parser = argparse.ArgumentParser(
+    description=description,
+    formatter_class=argparse.RawDescriptionHelpFormatter
+)
+parser.add_argument("mode", metavar="mode1", choices=["train", "test", "run", "samples"])
+parser.add_argument("file1")
+parser.add_argument("file2", nargs="?")
+parser.add_argument("-c", dest="useCoarseOnly", action="store_true", \
+    help="Operate on the coarse network.")
+parser.add_argument("-n", dest="reinitialise",  action="store_true", \
+    help="Reinitialise the values of the detailed (or coarse) network.")
+parser.add_argument("-s", dest="numSteps", type=int, default=100, \
+    help="When training/testing, specifies the number of training/testing steps.")
+parser.add_argument("-o", dest="outputImg", \
+    help="When running or generating samples, specifies the output image file or directory.")
+parser.add_argument("-t", dest="threshold", type=float, \
+    help="Affects the precision-recall tradeoff.\
+        If operating on the coarse network, positive predictions will be those above this value.\
+        The default is 0.5.\
+        If running on input images, causes positive prediction cells to be fully colored.")
+args = parser.parse_args()
+#set variables from command line arguments
+mode           = args.mode
+dataFile       = args.file1
+filterFile     = args.file2
+useCoarseOnly  = args.useCoarseOnly
+reinitialise   = args.reinitialise
+numSteps       = args.numSteps
+outputImg      = args.outputImg
+threshold      = args.threshold or 0.5
+thresholdGiven = args.threshold != None
+#check variables
+if numSteps <= 0:
+    print("Negative number of steps", file=sys.stderr)
     sys.exit(1)
-if dataFile == None:
-    print("No specified data file", file=sys.stderr)
+if threshold <= 0 or threshold >= 1:
+    print("Invalid threshold", file=sys.stderr)
     sys.exit(1)
-if filterFile == None:
-    filterFile = "filterData.txt"
 
 #constants
 IMG_HEIGHT           = 960
@@ -596,7 +524,7 @@ with tf.Session() as sess:
         else:
             sess.run(tf.initialize_variables(variables))
     #training
-    if mode == MODE_TRAIN:
+    if mode == "train":
         if useCoarseOnly: #train coarse network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/train/coarse', sess.graph)
             prod = CoarseBatchProducer(dataFile, cellFilter)
@@ -654,7 +582,7 @@ with tf.Session() as sess:
                 saver.save(sess, SAVE_FILE)
         summaryWriter.close()
     #testing
-    elif mode == MODE_TEST:
+    elif mode == "test":
         if useCoarseOnly: #test coarse network
             summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/coarse', sess.graph)
             prod = CoarseBatchProducer(dataFile, cellFilter)
@@ -710,11 +638,11 @@ with tf.Session() as sess:
         )
         summaryWriter.close()
     #running
-    elif mode == MODE_RUN:
+    elif mode == "run":
         #get input files
         if os.path.isfile(dataFile):
             filenames = [dataFile]
-            outputFilenames = [outputImg or "output.jpg"]
+            outputFilenames = [outputImg or "out.jpg"]
         elif os.path.isdir(dataFile):
             filenames = [
                 dataFile + "/" + name for
@@ -723,12 +651,12 @@ with tf.Session() as sess:
             ]
             filenames.sort()
             outputDir = outputImg or dataFile
-            if not os.path.exists(outputDir) or not os.path.isdir(outputDir):
+            if not os.path.exists(outputDir):
+                os.mkdir(outputDir)
+            elif not os.path.isdir(outputDir):
                 print("Invalid output directory", file=sys.stderr)
                 sys.exit(1)
-            outputFilenames = [
-                re.sub(dataFile + "/(.*)\.jpg$", outputDir + "/\\1_out.jpg", n) for n in filenames
-            ]
+            outputFilenames = [outputDir + "/" + os.path.basename(name) for name in filenames]
         else:
             print("Invalid input file(s)", file=sys.stderr)
             sys.exit(1)
@@ -808,17 +736,21 @@ with tf.Session() as sess:
                         INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
                         INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
                     ], outline=(0,0,0,255))
-            image.save(outputFilenames[fileIdx])
-            #output time taken
-            print(
-                "Time taken: %.2f secs, image written to %s" %
-                (time.time() - startTime, outputFilenames[fileIdx])
-            )
+            if not os.path.exists(outputFilenames[fileIdx]):
+                image.save(outputFilenames[fileIdx])
+                print(
+                    "Time taken: %.2f secs, image written to %s" %
+                    (time.time() - startTime, outputFilenames[fileIdx])
+                )
+            else:
+                print(
+                    "Time taken: %.2f secs, no image %s written, as it already exists" %
+                    (time.time() - startTime, outputFilenames[fileIdx])
+                )
     #sample generating
-    elif mode == MODE_SAMPLES:
+    elif mode == "samples":
         NUM_SAMPLES = (20, 20)
-        if outputImg == None:
-            outputImg = "samples.jpg"
+        outputImg = outputImg or "out.jpg"
         if useCoarseOnly:
             prod = CoarseBatchProducer(dataFile, cellFilter)
         else:
@@ -851,10 +783,14 @@ with tf.Session() as sess:
                         INPUT_HEIGHT*(j+1),
                     ], fill=(0,255,0,64))
                     numPositive += 1
-        image.save(outputImg)
         #output time taken
         print("Time taken: %.2f secs" % (time.time() - startTime))
         print("Ratio of positive samples: %.2f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
-        print("Output written to %s" % outputImg)
+        #save image
+        if not os.path.exists(outputImg):
+            image.save(outputImg)
+            print("Output written to %s" % outputImg)
+        else:
+            print("No output file %s created, as a file already exists" % outputImg)
     #saving
     saver.save(sess, SAVE_FILE)

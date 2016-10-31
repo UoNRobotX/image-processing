@@ -1,108 +1,61 @@
-import sys, re, os
+import sys, re, os, argparse
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-usage = "Usage: python3 " + sys.argv[0] + """ mode1 [-d d1] [-o f1] [-l f1] [-g f1] [-s d1]
-    Obtains a list of image filenames, specified by -d, or from stdin.
-    If obtained from stdin, each line should contain a filename.
+#process command line arguments
+description = """
+    First, obtains a list of image filenames.
+    By default, the filenames are read from stdin, with 1 filename per line.
         Leading and trailing whitespace, empty names, and names with commas, are ignored.
 
-    Each image is displayed, and the user may mark them using the mouse.
+    Then, each image is displayed, and the user may mark them using the mouse.
     Pressing right/left causes the next/previous image to be displayed.
-    Information about the images and boxes is written to stdout.
+    By default, information about the markings is written to stdout.
 
     'mode1' may be one of the following:
         filter:
             The user marks grid cells to be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether it is marked.
-            The output contains lines for each row of cells, containing 0s and 1s.
-                A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+            The output contains a line for each row of cells.
+                " 0111" specifies 4 cells of a row, 3 of which are marked.
         coarse:
             The user marks grid cells that contain only water.
             Clicking or dragging over a cell toggles whether it is marked.
             The output contains sections, each describing cells to ignore for an image.
                 Each section starts with a line containing the image filename.
-                Each such line is followed by indented lines for each row, containing 0s and 1s.
-                    A line ' 0111' specifies 4 cells of a row, 3 of which are marked.
+                Each such line is followed by an indented line for each row.
+                    " 0111" specifies 4 cells of a row, 3 of which are marked.
         detailed
             The user marks bounding boxes by clicking and dragging.
             Boxes can be deleted by right-clicking.
             The output contains lines holding image filenames.
             The output contains sections, each describing boxes for an image.
                 Each section starts with a line containing the image filename.
-                Each such line is followed by indented lines, each specifying a bounding box.
-                    A line ' 1,2,3,4' specifies a box with top-left 1,2 and bottom-right 3,4.
-
-    Options:
-        -d d1
-            Use .jpg files in directory d1 as the list of filenames.
-        -o f1
-            Write output to file f1 instead of to stdout.
-        -l f1
-            Load data from file f1, whose format should correspond to that of the mode.
-        -g f1
-            Skip to file f1 in the list.
-        -s d1
-            Save the images, with markings, to directory d1.
+                Each such line is followed by indented lines.
+                    " 1,2,3,4" specifies a box with top-left 1,2 and bottom-right 3,4.
 """
-
-#process command line arguments
-mode = None
-inputDir = None
-dataFile = None
-outputFile = None
-skipFile = None
-outputDir = None
-i = 1
-while i < len(sys.argv):
-    arg = sys.argv[i]
-    if arg == "-d":
-        i += 1
-        if i < len(sys.argv):
-            inputDir = sys.argv[i]
-        else:
-            print("No argument for -d", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-o":
-        i += 1
-        if i < len(sys.argv):
-            outputFile = sys.argv[i]
-        else:
-            print("No argument for -o", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-l":
-        i += 1
-        if i < len(sys.argv):
-            dataFile = sys.argv[i]
-        else:
-            print("No argument for -l", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-g":
-        i += 1
-        if i < len(sys.argv):
-            skipFile = sys.argv[i]
-        else:
-            print("No argument for -g", file=sys.stderr)
-            sys.exit(1)
-    elif arg == "-s":
-        i += 1
-        if i < len(sys.argv):
-            outputDir = sys.argv[i]
-            if not os.path.isdir(outputDir):
-                print("Non-directory argument for -s", file=sys.stderr)
-                sys.exit(1)
-        else:
-            print("No argument for -s", file=sys.stderr)
-            sys.exit(1)
-    else:
-        if arg == "filter" or arg == "coarse" or arg == "detailed":
-            mode = arg
-        else:
-            print("Invalid mode", file=sys.stderr)
-            sys.exit(1)
-    i += 1
-if mode == None:
-    print("No specified mode", file=sys.stderr)
+parser = argparse.ArgumentParser(
+    description=description,
+    formatter_class=argparse.RawDescriptionHelpFormatter
+)
+parser.add_argument("mode", metavar="mode1", choices=["filter", "coarse", "detailed"])
+parser.add_argument("-d", dest="inputDir",   help="Use JPG files in a directory as the images to mark.")
+parser.add_argument("-o", dest="outputFile", help="Write output to a file instead of to stdout.")
+parser.add_argument("-l", dest="loadFile",   help="Load mark data from a file.")
+parser.add_argument("-g", dest="skipFile",   help="Skip to file f1 in the list.")
+parser.add_argument("-s", dest="saveDir",    help="Save the images, with markings, to a directory.")
+args = parser.parse_args()
+sys.exit(0)
+#set variables from command line arguments
+mode       = args.mode
+inputDir   = args.inputDir
+loadFile   = args.loadFile
+outputFile = args.outputFile
+skipFile   = args.skipFile
+saveDir    = args.saveDir
+#check variables
+if saveDir != None and not os.path.isdir(saveDir):
+    print("Invalid output save directory", file=sys.stderr)
     sys.exit(1)
 
 #get input filenames
@@ -125,8 +78,8 @@ if len(filenames) == 0:
 
 #load markings if specified
 cellFilter = None #contains loaded filter information
-if dataFile != None:
-    with open(dataFile) as file:
+if loadFile != None:
+    with open(loadFile) as file:
         if mode == "filter":
             cellFilter = []
             for line in file:
@@ -307,7 +260,7 @@ def setupMarkCell(markFilter):
         if not f is sys.stdout:
             f.close()
         #save images if requested
-        if outputDir != None:
+        if saveDir != None:
             for filename in filenamesSorted:
                 image = Image.open(filename)
                 draw = ImageDraw.Draw(image, "RGBA")
@@ -328,7 +281,7 @@ def setupMarkCell(markFilter):
                                 [topLeftX, topLeftY, bottomRightX, bottomRightY],
                                 fill=(0,128,0,128)
                             )
-                image.save(outputDir + "/" + os.path.basename(filename))
+                image.save(saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
     def markWaterEscapeCallback(event=None):
         #store info
@@ -352,7 +305,7 @@ def setupMarkCell(markFilter):
         if not f is sys.stdout:
             f.close()
         #save images if requested
-        if outputDir != None:
+        if saveDir != None:
             for filename in filenamesSorted:
                 info = filenames[filename]
                 if info != None:
@@ -375,7 +328,7 @@ def setupMarkCell(markFilter):
                                     [topLeftX, topLeftY, bottomRightX, bottomRightY],
                                     fill=(0,128,0,128)
                                 )
-                    image.save(outputDir + "/" + os.path.basename(filename))
+                    image.save(saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
     #set handlers
     canvas.bind("<Configure>", resizeCallback)
@@ -535,7 +488,7 @@ def setupMarkBox():
         if not f is sys.stdout:
             f.close()
         #save images if requested
-        if outputDir != None:
+        if saveDir != None:
             for filename in filenamesSorted:
                 info = filenames[filename]
                 if info != None:
@@ -543,7 +496,7 @@ def setupMarkBox():
                     draw = ImageDraw.Draw(image, "RGBA")
                     for box in filenames[filename]:
                         draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
-                    image.save(outputDir + "/" + os.path.basename(filename))
+                    image.save(saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
     #load boxes if present
     filename = filenamesSorted[filenameIdx]

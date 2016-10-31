@@ -51,10 +51,12 @@
     * `python3 findBuoys.py train trainingDataCoarse.txt filterData.txt -c -s 100`
 * Test the coarse network.
     * `python3 findBuoys.py test testingDataCoarse.txt filterData.txt -c`
-* View the results of running the coarse network on an image. After running, a representation of the results is saved in outputFindBuoys.jpg.
-    * `python3 findBuoys.py run images/008.jpg filterData.txt -c`
-* View sample coarse network inputs. After running, a representation of the results is saved in samplesFindBuoys.jpg.
-    * `python3 findBuoys.py samples trainingDataCoarse.txt filterData.txt -c`
+* View the results of running the coarse network on an image.
+    * `python3 findBuoys.py run images/076.jpg filterData.txt -c -o out.jpg`
+    * View out.jpg
+* View sample coarse network inputs.
+    * `python3 findBuoys.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg`
+    * View out.jpg
 
 ## Working with the whole network.
 * Train the network, for 100 steps.
