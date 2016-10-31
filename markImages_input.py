@@ -1,8 +1,7 @@
 import sys, os, re
 
 def getFilenames(inputDir):
-    """
-        Obtain filenames of images to be marked, from stdin or a directory.
+    """ Obtain filenames of images to be marked, from stdin or a directory.
         Returns a dict that maps each filename to None.
     """
     fileMarks = dict()
@@ -22,8 +21,7 @@ def getFilenames(inputDir):
     return fileMarks
 
 def loadFilterData(loadFile):
-    """
-        Loads a cell filter from a file.
+    """ Loads a cell filter from a file.
         Returns a list with the form [[0, 1, ...], ...].
             Each element denotes a row of cells, where 1 indicates a filtered cell.
     """
@@ -34,8 +32,7 @@ def loadFilterData(loadFile):
     return cellFilter
 
 def loadCoarseSet(loadFile, fileMarks):
-    """
-        Reads coarse set data from 'loadFile', adding it to 'fileMarks'.
+    """ Reads coarse set data from 'loadFile', adding it to 'fileMarks'.
         'fileMarks' should map filenames to mark information.
             fileMarks[filename] may be None, indicating no mark information.
             fileMarks[filename] may have the form [[0, 1, ...], ...].
@@ -54,8 +51,7 @@ def loadCoarseSet(loadFile, fileMarks):
     return fileMarks
 
 def loadDetailedSet(loadFile, fileMarks):
-    """
-        Reads detailed set data from 'loadFile', adding it to 'fileMarks'.
+    """ Reads detailed set data from 'loadFile', adding it to 'fileMarks'.
         'fileMarks' should map filenames to mark information.
             fileMarks[filename] may be None, indicating no mark information.
             fileMarks[filename] may have the form [[x,y,x,y], ...].

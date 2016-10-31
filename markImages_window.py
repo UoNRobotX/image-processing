@@ -2,10 +2,7 @@ import sys, os
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-#constants
-DOWNSCALE    = 2  #downscale images, as done in the coarse/detailed networks
-INPUT_HEIGHT = 32 #coarse/detailed network input height size
-INPUT_WIDTH  = 32
+from constants import *
 
 class Window:
     #constructor
@@ -42,7 +39,7 @@ class Window:
         #obtain image, and downscale it
         self.image = Image.open(self.filenames[self.fileIdx])
         self.image = self.image.resize(
-            (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+            (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
         #create canvas, and add the image to it
@@ -126,8 +123,8 @@ class Window:
             for box in self.fileMarks[filename]:
                 self.boxCoords.append(box)
                 #convert to scaled image coordinates
-                wscale = self.canvasWidth /(self.image.size[0] * DOWNSCALE)
-                hscale = self.canvasHeight/(self.image.size[1] * DOWNSCALE)
+                wscale = self.canvasWidth /IMG_SCALED_WIDTH
+                hscale = self.canvasHeight/IMG_SCALED_HEIGHT
                 #add box
                 self.boxIDs.append(
                     self.canvas.create_rectangle(
@@ -196,7 +193,7 @@ class Window:
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(self.filenames[self.fileIdx])
             self.image = self.image.resize(
-                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
             )
             self.imageTk = ImageTk.PhotoImage(
@@ -238,7 +235,7 @@ class Window:
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(filename)
             self.image = self.image.resize(
-                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
             )
             self.imageTk = ImageTk.PhotoImage(
@@ -268,12 +265,12 @@ class Window:
             for filename in self.filenames:
                 image = Image.open(filename)
                 draw = ImageDraw.Draw(image, "RGBA")
-                for i in range(image.size[0]//DOWNSCALE//INPUT_WIDTH):
-                    for j in range(image.size[1]//DOWNSCALE//INPUT_HEIGHT):
-                        topLeftX = i * INPUT_WIDTH * DOWNSCALE
-                        topLeftY = j * INPUT_HEIGHT * DOWNSCALE
-                        bottomRightX = (i+1) * INPUT_WIDTH  * DOWNSCALE - 1
-                        bottomRightY = (j+1) * INPUT_HEIGHT * DOWNSCALE - 1
+                for i in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    for j in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                        topLeftX = i * INPUT_WIDTH * IMG_DOWNSCALE
+                        topLeftY = j * INPUT_HEIGHT * IMG_DOWNSCALE
+                        bottomRightX = (i+1) * INPUT_WIDTH  * IMG_DOWNSCALE - 1
+                        bottomRightY = (j+1) * INPUT_HEIGHT * IMG_DOWNSCALE - 1
                         #draw grid box
                         draw.rectangle(
                             [topLeftX, topLeftY, bottomRightX, bottomRightY],
@@ -314,12 +311,12 @@ class Window:
                 if info != None:
                     image = Image.open(filename)
                     draw = ImageDraw.Draw(image, "RGBA")
-                    for i in range(image.size[0]//DOWNSCALE//INPUT_WIDTH):
-                        for j in range(image.size[1]//DOWNSCALE//INPUT_HEIGHT):
-                            topLeftX = i * INPUT_WIDTH * DOWNSCALE
-                            topLeftY = j * INPUT_HEIGHT * DOWNSCALE
-                            bottomRightX = (i+1) * INPUT_WIDTH  * DOWNSCALE - 1
-                            bottomRightY = (j+1) * INPUT_HEIGHT * DOWNSCALE - 1
+                    for i in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                        for j in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                            topLeftX = i * INPUT_WIDTH * IMG_DOWNSCALE
+                            topLeftY = j * INPUT_HEIGHT * IMG_DOWNSCALE
+                            bottomRightX = (i+1) * INPUT_WIDTH  * IMG_DOWNSCALE - 1
+                            bottomRightY = (j+1) * INPUT_HEIGHT * IMG_DOWNSCALE - 1
                             #draw grid box
                             draw.rectangle(
                                 [topLeftX, topLeftY, bottomRightX, bottomRightY],
@@ -365,8 +362,8 @@ class Window:
             )
         )
         #convert to non-scaled image coordinates
-        wscale = (self.image.size[0] * DOWNSCALE)/self.canvasWidth
-        hscale = (self.image.size[1] * DOWNSCALE)/self.canvasHeight
+        wscale = IMG_SCALED_WIDTH/self.canvasWidth
+        hscale = IMG_SCALED_HEIGHT/self.canvasHeight
         self.sel[0][0] = int(self.sel[0][0] * wscale)
         self.sel[0][1] = int(self.sel[0][1] * hscale)
         self.sel[1][0] = int(self.sel[1][0] * wscale)
@@ -375,8 +372,8 @@ class Window:
         self.boxCoords.append([self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]])
     def markDetailedRightClickCallback(self, event):
         #convert click coordinate to non-scaled image coordinates
-        x = int(event.x * self.image.size[0]*DOWNSCALE/self.canvasWidth)
-        y = int(event.y * self.image.size[1]*DOWNSCALE/self.canvasHeight)
+        x = int(event.x * IMG_SCALED_WIDTH/self.canvasWidth)
+        y = int(event.y * IMG_SCALED_HEIGHT/self.canvasHeight)
         #find and remove overlapping boxes
         indices = []
         for i in range(len(self.boxCoords)):
@@ -406,8 +403,8 @@ class Window:
                 for box in self.fileMarks[filename]:
                     self.boxCoords.append(box)
                     #convert to scaled image coordinates
-                    wscale = self.canvasWidth /(self.image.size[0] * DOWNSCALE)
-                    hscale = self.canvasHeight/(self.image.size[1] * DOWNSCALE)
+                    wscale = self.canvasWidth /IMG_SCALED_WIDTH
+                    hscale = self.canvasHeight/IMG_SCALED_HEIGHT
                     #add box
                     self.boxIDs.append(
                         self.canvas.create_rectangle(
@@ -420,7 +417,7 @@ class Window:
             #load new image
             self.image = Image.open(self.filenames[self.fileIdx])
             self.image = self.image.resize(
-                (self.image.size[0]//DOWNSCALE, self.image.size[1]//DOWNSCALE),
+                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
             )
             self.imageTk = ImageTk.PhotoImage(
