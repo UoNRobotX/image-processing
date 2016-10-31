@@ -117,7 +117,7 @@ class BatchProducer:
     """Produces input values for the detailed network"""
     VALUES_PER_IMAGE = 100
     #constructor
-    def __init__(self, dataFile, cellFilter, coarseX, coarseY):
+    def __init__(self, dataFile, cellFilter, coarseX, coarseY, threshold):
         self.filenames = [] #list of image files
         self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
         self.fileIdx = 0
@@ -126,6 +126,7 @@ class BatchProducer:
         self.unfilteredCells = None
         self.coarseX = coarseX
         self.coarseY = coarseY #allows using the coarse network to filter cells
+        self.threshold = threshold
         #read 'dataFile'
         filenameSet = set()
         boxesDict = dict()
@@ -218,7 +219,7 @@ class BatchProducer:
                 self.valuesGenerated += 1
             #filter using coarse network
             out = self.coarseY.eval(feed_dict={self.coarseX: np.array(potentialInputs)})
-            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < threshold]
+            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < self.threshold]
             inputs  += [potentialInputs[i] for i in unfilteredIndices]
             outputs += [potentialOutputs[i] for i in unfilteredIndices]
             #update
