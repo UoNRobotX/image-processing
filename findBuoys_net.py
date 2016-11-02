@@ -11,7 +11,7 @@ class NetworkNodes:
         self.recall = recall
         self.train = train
         self.variables = variables
-        self.summaries = summaries
+        self.summaries = tf.merge_summary(summaries)
 
 def createCoarseNetwork(x, y_, threshold):
     #helper functions
@@ -22,23 +22,11 @@ def createCoarseNetwork(x, y_, threshold):
                     tf.truncated_normal([inSize, outSize], stddev=0.5)
                 )
                 variables.append(w)
-                #add summaries
-                mean = tf.reduce_mean(w)
-                summaries.append(tf.scalar_summary(netName + '/mean/' + layerName + '/weights', mean))
-                summaries.append(tf.scalar_summary(
-                    netName + '/stddev/' + layerName + '/weights', tf.reduce_mean(tf.square(w - mean))
-                ))
-                summaries.append(tf.histogram_summary(netName + '/' + layerName + '/weights', w))
+                addSummaries(w, summaries, netName + "/" + layerName + "/weights", "mean_stddev_hist")
             with tf.name_scope('biases'):
                 b = tf.Variable(tf.constant(0.1, shape=[outSize]))
                 variables.append(b)
-                #add summaries
-                mean = tf.reduce_mean(b)
-                summaries.append(tf.scalar_summary(netName + '/mean/' + layerName + '/biases', mean))
-                summaries.append(tf.scalar_summary(
-                    netName + '/stddev/' + layerName + '/biases', tf.reduce_mean(tf.square(b - mean))
-                ))
-                summaries.append(tf.histogram_summary(netName + '/' + layerName + '/biases', b))
+                addSummaries(b, summaries, netName + "/" + layerName + "/biases", "mean_stddev_hist")
             return tf.nn.sigmoid(tf.matmul(input, w) + b, 'out')
     #create nodes
     NET_NAME = 'coarse_net'
@@ -53,8 +41,7 @@ def createCoarseNetwork(x, y_, threshold):
                 INPUT_CHANNELS = 1
             x_flat = tf.reshape(x_flat, [-1, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS])
             x_flat = tf.div(x_flat, tf.constant(255.0)) #normalize values
-            #add summary
-            summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
+            addSummaries(x, summaries, NET_NAME + "/input", "image")
         h = createLayer(
             x_flat, INPUT_HEIGHT*INPUT_WIDTH*INPUT_CHANNELS, 30, NET_NAME, 'hidden_layer', variables, summaries
         )
@@ -68,8 +55,7 @@ def createCoarseNetwork(x, y_, threshold):
         #cost
         with tf.name_scope('cost'):
             cost = tf.square(y2 - y)
-            #add summary
-            summaries.append(tf.scalar_summary(NET_NAME + '/cost', tf.reduce_mean(cost)))
+            addSummaries(cost, summaries, NET_NAME + "/cost", "mean")
         #optimizer
         with tf.name_scope('train'):
             train = tf.train.AdamOptimizer().minimize(cost)
@@ -95,12 +81,11 @@ def createCoarseNetwork(x, y_, threshold):
                 lambda: tf.constant(0.0),
                 lambda: truePos / actualPos
             )
-            #add summary
-            summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
-            summaries.append(tf.scalar_summary(NET_NAME + '/precision', prec))
-            summaries.append(tf.scalar_summary(NET_NAME + '/recall', rec))
+            addSummaries(accuracy, summaries, NET_NAME + "/accuracy", "mean")
+            addSummaries(prec, summaries, NET_NAME + "/precision", "mean")
+            addSummaries(rec, summaries, NET_NAME + "/recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(y, accuracy, prec, rec, train, variables, tf.merge_summary(summaries))
+    return NetworkNodes(y, accuracy, prec, rec, train, variables, summaries)
 
 def createDetailedNetwork(x, y_, p_dropout):
     #helper functions
@@ -117,35 +102,20 @@ def createDetailedNetwork(x, y_, p_dropout):
     def createPool(c):
         with tf.name_scope('pool'):
             return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
-    def addSummaries(w, b, summaries, layerName):
-        #weight summaries
-        wMean = tf.reduce_mean(w)
-        summaries.append(tf.scalar_summary(layerName + '/mean/weights', wMean))
-        summaries.append(tf.scalar_summary(
-            layerName + 'stddev/weights', tf.reduce_mean(tf.square(w-wMean))
-        ))
-        summaries.append(tf.histogram_summary(layerName + '/weights', w))
-        #biases summaries
-        bMean = tf.reduce_mean(b)
-        summaries.append(tf.scalar_summary(layerName + '/mean/biases', bMean))
-        summaries.append(tf.scalar_summary(
-            layerName + 'stddev/biases', tf.reduce_mean(tf.square(b-bMean))
-        ))
-        summaries.append(tf.histogram_summary(layerName + '/biases', b))
     #create nodes
     NET_NAME = 'detailed_net'
     summaries = []
     variables = []
     with tf.name_scope(NET_NAME):
-        #add input image summary
-        summaries.append(tf.image_summary(NET_NAME + '/input', x, 10))
+        addSummaries(x, summaries, NET_NAME + "/input", "image")
         #first convolutional layer
         with tf.name_scope('conv_layer1'):
             w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
             b1 = createBiases([32])
             c1 = createConv(x, w1, b1)
             p1 = createPool(c1)
-            #addSummaries(w1, b1, summaries, NET_NAME + '/conv_layer1')
+            #addSummaries(w1, summaries, NET_NAME + "/conv_layer1", "mean_stddev_hist")
+            #addSummaries(b1, summaries, NET_NAME + "/conv_layer1", "mean_stddev_hist")
             variables += [w1, b1]
         #second convolutional layer
         with tf.name_scope('conv_layer2'):
@@ -153,7 +123,8 @@ def createDetailedNetwork(x, y_, p_dropout):
             b2 = createBiases([64])
             c2 = createConv(p1, w2, b2)
             p2 = createPool(c2)
-            #addSummaries(w1, b1, summaries, NET_NAME + '/conv_layer2')
+            #addSummaries(w2, summaries, NET_NAME + "/conv_layer2", "mean_stddev_hist")
+            #addSummaries(b2, summaries, NET_NAME + "/conv_layer2", "mean_stddev_hist")
             variables += [w2, b2]
         #densely connected layer
         with tf.name_scope('dense_layer'):
@@ -161,7 +132,8 @@ def createDetailedNetwork(x, y_, p_dropout):
             b3 = createBiases([1024])
             p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
             h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
-            #addSummaries(w3, b3, summaries, NET_NAME + '/dense_layer')
+            #addSummaries(w3, summaries, NET_NAME + "/dense_layer", "mean_stddev_hist")
+            #addSummaries(b3, summaries, NET_NAME + "/dense_layer", "mean_stddev_hist")
             variables += [w3, b3]
         #dropout
         h1_dropout = tf.nn.dropout(h1, p_dropout)
@@ -177,8 +149,7 @@ def createDetailedNetwork(x, y_, p_dropout):
                 -tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)),
                 reduction_indices=[1])
             )
-            #add summary
-            summaries.append(tf.scalar_summary(NET_NAME + '/cost', cost))
+            addSummaries(cost, summaries, NET_NAME + "/cost", "mean")
         #optimizer
         with tf.name_scope('train'):
             train = tf.train.AdamOptimizer().minimize(cost)
@@ -205,9 +176,25 @@ def createDetailedNetwork(x, y_, p_dropout):
                 lambda: tf.constant(0.0),
                 lambda: truePos / actualPos
             )
-            #add summaries
-            summaries.append(tf.scalar_summary(NET_NAME + '/accuracy', accuracy))
-            summaries.append(tf.scalar_summary(NET_NAME + '/precision', prec))
-            summaries.append(tf.scalar_summary(NET_NAME + '/recall', rec))
+            addSummaries(accuracy, summaries, NET_NAME + "/accuracy", "mean")
+            addSummaries(prec, summaries, NET_NAME + "/precision", "mean")
+            addSummaries(rec, summaries, NET_NAME + "/recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(y, accuracy, prec, rec, train, variables, tf.merge_summary(summaries))
+    return NetworkNodes(y, accuracy, prec, rec, train, variables, summaries)
+
+def addSummaries(node, summaries, name, method):
+    """
+        Used to create and attach summary nodes to 'node'.
+        'method' specifies the kinds of summaries to add.
+    """
+    with tf.device("/cpu:0"):
+        if method == "mean":
+            summaries.append(tf.scalar_summary(name + "/mean", tf.reduce_mean(node)))
+        elif method == "mean_stddev_hist":
+            mean = tf.reduce_mean(node)
+            summaries.append(tf.scalar_summary(name + "/mean", mean))
+            summaries.append(tf.scalar_summary(name + "/stddev", tf.reduce_mean(tf.square(node-mean))))
+            summaries.append(tf.histogram_summary(name, node))
+        elif method == "image":
+            MAX_NUM_IMAGES = 10
+            summaries.append(tf.image_summary(name, node, MAX_NUM_IMAGES))
