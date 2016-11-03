@@ -60,18 +60,18 @@ class CoarseBatchProducer:
         for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
             self.loadImage(i)
     #load next image
-    def loadImage(self, i):
+    def loadImage(self, fileIdx):
         #obtain PIL image
-        image = Image.open(self.filenames[i])
+        image = Image.open(self.filenames[fileIdx])
         image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
         #get inputs and outputs
-        self.inputs[i] = []
-        self.outputs[i] = []
-        for row in range(len(self.cells[i])):
-            for col in range(len(self.cells[i][row])):
+        self.inputs[fileIdx] = []
+        self.outputs[fileIdx] = []
+        for row in range(len(self.cells[fileIdx])):
+            for col in range(len(self.cells[fileIdx][row])):
                 #use static filter
                 if self.cellFilter[row][col] == 1:
                     continue
@@ -80,11 +80,11 @@ class CoarseBatchProducer:
                     (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
                 )
                 #preprocess image
-                cellImages = [cellImg]
                 if False: #maximise image contrast
                     cellImg = ImageOps.autocontrast(cellImg)
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                cellImages = [cellImg]
                 if True: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
@@ -110,10 +110,11 @@ class CoarseBatchProducer:
                     )
                     for img in cellImages
                 ]
-                self.inputs[i] += data
-                self.outputs[i] += [[1,0] if self.cells[i][row][col] == 1 else [0,1]] * len(cellImages)
-        if len(self.inputs[i]) == 0:
-            raise Exception("No unfiltered cells for \"" + self.filenames[i] + "\"")
+                self.inputs[fileIdx] += data
+                containsWater = self.cells[fileIdx][row][col] == 1
+                self.outputs[fileIdx] += [[1,0] if containsWater else [0,1]] * len(cellImages)
+        if len(self.inputs[fileIdx]) == 0:
+            raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
@@ -141,7 +142,7 @@ class CoarseBatchProducer:
 #class for producing detailed network input values from a training/test data file
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
-    VALUES_PER_IMAGE = 300
+    VALUES_PER_IMAGE = 400
     LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter):
@@ -168,7 +169,7 @@ class DetailedBatchProducer:
                     boxesDict[filename].append([int(c) for c in line.strip().split(",")])
         if len(self.filenames) == 0:
             raise Exception("No filenames")
-        random.shuffle(self.filenames)
+        #random.shuffle(self.filenames)
         self.boxes = [boxesDict[name] for name in self.filenames]
         #allocate inputs and outputs
         self.inputs = [None for name in self.filenames]
@@ -177,24 +178,44 @@ class DetailedBatchProducer:
         for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
             self.loadImage(i)
     #load next image
-    def loadImage(self, i):
+    def loadImage(self, fileIdx):
         #obtain PIL image
-        image = Image.open(self.filenames[i])
+        image = Image.open(self.filenames[fileIdx])
         image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
         #get inputs and outputs
-        self.inputs[i] = []
-        self.outputs[i] = []
-        for row in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for col in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+        self.inputs[fileIdx] = []
+        self.outputs[fileIdx] = []
+        stride = (INPUT_WIDTH//2, INPUT_HEIGHT//2)
+        numHorizontalSteps = (IMG_SCALED_WIDTH  // stride[0]) - INPUT_WIDTH  // stride[0]
+        numVerticalSteps   = (IMG_SCALED_HEIGHT // stride[1]) - INPUT_HEIGHT // stride[1]
+        for i in range(numVerticalSteps):
+            for j in range(numHorizontalSteps):
+                #get cell position
+                x = j*stride[0]
+                y = i*stride[1]
                 #use static filter
-                if self.cellFilter[row][col] == 1:
+                intersectingCols = [x // INPUT_WIDTH]
+                intersectingRows = [y // INPUT_HEIGHT]
+                if x % INPUT_WIDTH != 0:
+                    intersectingCols.append(x // INPUT_WIDTH + 1)
+                if y % INPUT_HEIGHT != 0:
+                    intersectingRows.append(y // INPUT_HEIGHT + 1)
+                intersectingCells = (
+                    (row, col) for row in intersectingRows for col in intersectingCols
+                )
+                hasOverlappingFilteredCell = False
+                for (row, col) in intersectingCells:
+                    if self.cellFilter[row][col] == 1:
+                        hasOverlappingFilteredCell = True
+                        break
+                if hasOverlappingFilteredCell:
                     continue
                 #get cell image
                 cellImg = image.crop(
-                    (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
+                    (x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT)
                 )
                 #TODO: filter with coarse network?
                 #preprocess image
@@ -202,6 +223,7 @@ class DetailedBatchProducer:
                     cellImg = ImageOps.autocontrast(cellImg)
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                cellImages = [cellImg]
                 if True: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
@@ -220,30 +242,33 @@ class DetailedBatchProducer:
                             resample=Image.BICUBIC)
                         for img in cellImages
                     ]
-                #get inputs and outputs
+                #get input
                 data = [
                     np.array(list(img.getdata())).astype(np.float32).reshape(
                         (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
                     )
                     for img in cellImages
                 ]
-                self.inputs[i] += data
-                MARGIN = 10
-                topLeftX = col*INPUT_WIDTH*IMG_DOWNSCALE + MARGIN
-                topLeftY = row*INPUT_HEIGHT*IMG_DOWNSCALE + MARGIN
-                bottomRightX = (col*INPUT_WIDTH+INPUT_WIDTH-1)*IMG_DOWNSCALE - MARGIN
-                bottomRightY = (row*INPUT_HEIGHT+INPUT_HEIGHT-1)*IMG_DOWNSCALE - MARGIN
+                self.inputs[fileIdx] += data
+                #get output
+                topLeftX = x*IMG_DOWNSCALE
+                topLeftY = y*IMG_DOWNSCALE
+                bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE
+                bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE
                 hasOverlappingBox = False
                 for box in self.boxes[self.idx]:
-                    if (not box[2] < topLeftX and
-                        not box[0] > bottomRightX and
-                        not box[3] < topLeftY and
-                        not box[1] > bottomRightY):
+                    f = 0.4 #impose overlap by least this factor, horizontally and vertically
+                    boxWidth = box[2]-box[0]
+                    boxHeight = box[3]-box[1]
+                    if (not box[2] < topLeftX     + boxWidth*f  and
+                        not box[0] > bottomRightX - boxWidth*f  and
+                        not box[3] < topLeftY     + boxHeight*f and
+                        not box[1] > bottomRightY - boxHeight*f):
                         hasOverlappingBox = True
                         break
-                self.outputs[i] += [[1,0] if hasOverlappingBox else [0,1]] * len(cellImages)
-        if len(self.inputs[i]) == 0:
-            raise Exception("No unfiltered cells for \"" + self.filenames[i] + "\"")
+                self.outputs[fileIdx] += [[1,0] if hasOverlappingBox else [0,1]] * len(cellImages)
+        if len(self.inputs[fileIdx]) == 0:
+            raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
