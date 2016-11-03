@@ -2,7 +2,7 @@ import math, random
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-from constants import *
+from .constants import *
 
 def getCellFilter(filterFile):
     """ Obtains filter data from "filterFile", or uses an empty filter.
@@ -21,11 +21,9 @@ def getCellFilter(filterFile):
         ]
     return cellFilter
 
-#class for producing coarse network input values from a training/test data file
 class CoarseBatchProducer:
     """Produces input values for the coarse network"""
     VALUES_PER_IMAGE = 300
-    LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter):
         self.cellFilter      = cellFilter
@@ -57,7 +55,7 @@ class CoarseBatchProducer:
         self.inputs = [None for name in self.filenames]
         self.outputs = [None for name in self.filenames]
         #load images
-        for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
+        for i in range(1 if LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
             self.loadImage(i)
     #load next image
     def loadImage(self, fileIdx):
@@ -123,7 +121,7 @@ class CoarseBatchProducer:
         while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 self.idx = (self.idx + 1) % len(self.inputs)
-                if self.LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
+                if LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
                     self.loadImage(self.idx)
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
@@ -139,11 +137,9 @@ class CoarseBatchProducer:
             c += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
-#class for producing detailed network input values from a training/test data file
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
     VALUES_PER_IMAGE = 400
-    LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter):
         self.cellFilter      = cellFilter
@@ -175,7 +171,7 @@ class DetailedBatchProducer:
         self.inputs = [None for name in self.filenames]
         self.outputs = [None for name in self.filenames]
         #load images
-        for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
+        for i in range(1 if LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
             self.loadImage(i)
     #load next image
     def loadImage(self, fileIdx):
@@ -277,7 +273,7 @@ class DetailedBatchProducer:
         while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 self.idx = (self.idx + 1) % len(self.inputs)
-                if self.LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
+                if LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
                     self.loadImage(self.idx)
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell

@@ -2,8 +2,8 @@ import time
 import numpy as np
 from PIL import Image, ImageDraw
 
-from constants import *
-from findBuoys_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
+from .constants import *
+from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
 
 NUM_SAMPLES = (20, 20)
 

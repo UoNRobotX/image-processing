@@ -1,9 +1,9 @@
 import os, time
 import tensorflow as tf
 
-from constants import *
-from findBuoys_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
-from findBuoys_net import createCoarseNetwork, createDetailedNetwork
+from .constants import *
+from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
+from .networks import createCoarseNetwork, createDetailedNetwork
 
 TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
 TRAINING_SAVE_PERIOD = 1000 #save every N steps

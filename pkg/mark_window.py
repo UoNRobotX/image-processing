@@ -2,7 +2,7 @@ import sys, os
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
-from constants import *
+from .constants import *
 
 class Window:
     #constructor
@@ -123,8 +123,8 @@ class Window:
             for box in self.fileMarks[filename]:
                 self.boxCoords.append(box)
                 #convert to scaled image coordinates
-                wscale = self.canvasWidth /IMG_SCALED_WIDTH
-                hscale = self.canvasHeight/IMG_SCALED_HEIGHT
+                wscale = self.canvasWidth /IMG_WIDTH
+                hscale = self.canvasHeight/IMG_HEIGHT
                 #add box
                 self.boxIDs.append(
                     self.canvas.create_rectangle(
@@ -362,8 +362,8 @@ class Window:
             )
         )
         #convert to non-scaled image coordinates
-        wscale = IMG_SCALED_WIDTH/self.canvasWidth
-        hscale = IMG_SCALED_HEIGHT/self.canvasHeight
+        wscale = IMG_WIDTH/self.canvasWidth
+        hscale = IMG_HEIGHT/self.canvasHeight
         self.sel[0][0] = int(self.sel[0][0] * wscale)
         self.sel[0][1] = int(self.sel[0][1] * hscale)
         self.sel[1][0] = int(self.sel[1][0] * wscale)
@@ -372,8 +372,8 @@ class Window:
         self.boxCoords.append([self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]])
     def markDetailedRightClickCallback(self, event):
         #convert click coordinate to non-scaled image coordinates
-        x = int(event.x * IMG_SCALED_WIDTH/self.canvasWidth)
-        y = int(event.y * IMG_SCALED_HEIGHT/self.canvasHeight)
+        x = int(event.x * IMG_WIDTH/self.canvasWidth)
+        y = int(event.y * IMG_HEIGHT/self.canvasHeight)
         #find and remove overlapping boxes
         indices = []
         for i in range(len(self.boxCoords)):
@@ -403,8 +403,8 @@ class Window:
                 for box in self.fileMarks[filename]:
                     self.boxCoords.append(box)
                     #convert to scaled image coordinates
-                    wscale = self.canvasWidth /IMG_SCALED_WIDTH
-                    hscale = self.canvasHeight/IMG_SCALED_HEIGHT
+                    wscale = self.canvasWidth /IMG_WIDTH
+                    hscale = self.canvasHeight/IMG_HEIGHT
                     #add box
                     self.boxIDs.append(
                         self.canvas.create_rectangle(

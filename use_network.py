@@ -1,9 +1,9 @@
 import argparse
 
-from findBuoys_train import train
-from findBuoys_test import test
-from findBuoys_run import run
-from findBuoys_genSamples import genSamples
+from pkg.train import train
+from pkg.test import test
+from pkg.run import run
+from pkg.genSamples import genSamples
 
 #process command line arguments
 description = """

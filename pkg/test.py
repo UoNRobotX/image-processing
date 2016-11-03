@@ -1,9 +1,9 @@
 import os, time
 import tensorflow as tf
 
-from constants import *
-from findBuoys_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
-from findBuoys_net import createCoarseNetwork, createDetailedNetwork
+from .constants import *
+from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
+from .networks import createCoarseNetwork, createDetailedNetwork
 
 TESTING_LOG_PERIOD = 10
 TESTING_RUN_PERIOD = 10

@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from constants import *
+from .constants import *
 
 class NetworkNodes:
     """ Holds nodes of a tensorflow network """
@@ -73,6 +73,7 @@ def createCoarseNetwork(threshold):
             y2_pred = tf.greater(y2, tf.constant(0.5))
             correctness = tf.equal(y_pred, y2_pred)
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            #precision and recall
             truePos = tf.reduce_sum(tf.cast(
                 tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
                 tf.float32

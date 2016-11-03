@@ -1,7 +1,7 @@
 import sys, os, argparse
 
-import markImages_input
-import markImages_window
+from pkg import mark_input
+from pkg import mark_window
 
 #process command line arguments
 description = """
@@ -61,16 +61,16 @@ if saveDir != None and not os.path.isdir(saveDir):
 
 #read input filenames, and load mark data
 cellFilter = None
-fileMarks = markImages_input.getFilenames(inputDir)
+fileMarks = mark_input.getFilenames(inputDir)
 if loadFile != None:
     if mode == "filter":
-        cellFilter = markImages_input.loadFilterData(loadFile)
+        cellFilter = mark_input.loadFilterData(loadFile)
     elif mode == "coarse":
-        fileMarks = markImages_input.loadCoarseSet(loadFile, fileMarks)
+        fileMarks = mark_input.loadCoarseSet(loadFile, fileMarks)
     elif mode == "detailed":
-        fileMarks = markImages_input.loadDetailedSet(loadFile, fileMarks)
+        fileMarks = mark_input.loadDetailedSet(loadFile, fileMarks)
 if len(fileMarks) == 0:
     raise Exception("No input files")
 
 #create window
-window = markImages_window.Window(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir)
+window = mark_window.Window(mode, skipFile, cellFilter, fileMarks, outputFile, saveDir)

@@ -1,7 +1,6 @@
-images_boxed
-images_marked
 coarseModel/*
 detailedModel/*
 coarseSummaries
 detailedSummaries
 videos
+**/__pycache__

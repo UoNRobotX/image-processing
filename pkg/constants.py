@@ -14,3 +14,5 @@ COARSE_SAVE_FILE     = "coarseModel/model.ckpt"   #save/load network values to/f
 DETAILED_SAVE_FILE   = "detailedModel/model.ckpt"
 COARSE_SUMMARIES     = "coarseSummaries" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES   = "detailedSummaries"
+
+LOAD_IMAGES_ON_DEMAND = True

@@ -3,9 +3,9 @@ import numpy as np
 from PIL import Image, ImageDraw
 import tensorflow as tf
 
-from constants import *
-from findBuoys_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
-from findBuoys_net import createCoarseNetwork, createDetailedNetwork
+from .constants import *
+from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
+from .networks import createCoarseNetwork, createDetailedNetwork
 
 def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold, thresholdGiven):
     startTime = time.time()
