@@ -25,45 +25,77 @@ def getCellFilter(filterFile):
 class CoarseBatchProducer:
     """Produces input values for the coarse network"""
     VALUES_PER_IMAGE = 300
+    LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter):
-        self.filenames = [] #list of image files
-        self.cells = []     #has the form [[[c1, c2, ...], ...], ...], specifying cells of images
-        self.fileIdx = 0
-        self.image = None
+        self.cellFilter      = cellFilter
+        self.filenames       = None #list of image files
+        self.cells           = None #has the form [[[0,1,...],...],...], specifying cells in images
+        self.inputs          = None
+        self.outputs         = None
+        self.idx             = 0
         self.valuesGenerated = 0
-        self.unfilteredCells = None
         #read 'dataFile'
+        self.filenames = []
         cellsDict = dict()
-        filename = None
         with open(dataFile) as file:
+            filename = None
             for line in file:
                 if line[0] != " ":
                     filename = line.strip()
                     self.filenames.append(filename)
                     cellsDict[filename] = []
+                elif filename == None:
+                    raise Exception("Invalid data file")
                 else:
                     cellsDict[filename].append([int(c) for c in line.strip()])
-        random.shuffle(self.filenames)
-        self.cells = [cellsDict[name] for name in self.filenames]
         if len(self.filenames) == 0:
             raise Exception("No filenames")
+        random.shuffle(self.filenames)
+        self.cells = [cellsDict[name] for name in self.filenames]
+        #allocate inputs and outputs
+        self.inputs = [None for name in self.filenames]
+        self.outputs = [None for name in self.filenames]
+        #load images
+        for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
+            self.loadImage(i)
+    #load next image
+    def loadImage(self, i):
         #obtain PIL image
-        self.image = Image.open(self.filenames[self.fileIdx])
-        self.image = self.image.resize(
+        image = Image.open(self.filenames[i])
+        image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
-        #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
-        rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
-        colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
-        self.unfilteredCells = []
-        for row in range(len(cellFilter)):
-            for col in range(len(cellFilter[row])):
-                if cellFilter[row][col] == 0:
-                    self.unfilteredCells.append(col+row*rowSize)
-        if len(self.unfilteredCells) == 0:
-            raise Exception("No unfiltered cells")
+        #get inputs and outputs
+        self.inputs[i] = []
+        self.outputs[i] = []
+        for row in range(len(self.cells[i])):
+            for col in range(len(self.cells[i][row])):
+                if self.cellFilter[row][col] == 1:
+                    continue
+                cellImg = image.crop(
+                    (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
+                )
+                #cellImg = ImageOps.autocontrast(cellImg)
+                #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                #cellImg2 = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
+                #cellImg3 = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+                cellImages = [
+                    cellImg,  cellImg.rotate(90),  cellImg.rotate(180),  cellImg.rotate(270)
+                    #, cellImg2, cellImg2.rotate(90), cellImg2.rotate(180), cellImg2.rotate(270)
+                    #, cellImg3, cellImg3.rotate(90), cellImg3.rotate(180), cellImg3.rotate(270)
+                ]
+                data = [
+                    np.array(list(img.getdata())).astype(np.float32).reshape(
+                        (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
+                    )
+                    for img in cellImages
+                ]
+                self.inputs[i] += data
+                self.outputs[i] += [[1,0] if self.cells[i][row][col] == 1 else [0,1]] * len(cellImages)
+        if len(self.inputs[i]) == 0:
+            raise Exception("No unfiltered cells for \"" + self.filenames[i] + "\"")
     #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
     def getBatch(self, size):
         inputs = []
@@ -71,42 +103,18 @@ class CoarseBatchProducer:
         c = 0
         while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
-                #open next image file
-                self.fileIdx += 1
-                if self.fileIdx+1 > len(self.filenames):
-                    self.fileIdx = 0
-                self.image = Image.open(self.filenames[self.fileIdx])
-                self.image = self.image.resize(
-                    (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                    resample=Image.LANCZOS
-                )
+                self.idx = (self.idx + 1) % len(self.inputs)
+                if self.LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
+                    self.loadImage(self.idx)
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
-            idx = self.unfilteredCells[
-                math.floor(random.random() * len(self.unfilteredCells))
-            ]
-            rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
-            i = idx % rowSize
-            j = idx // rowSize
-            x = i*INPUT_WIDTH
-            y = j*INPUT_HEIGHT
+            i = math.floor(random.random() * len(self.inputs[self.idx]))
             ##bias samples towards positive examples
-            #if self.cells[self.fileIdx][j][i] == 0 and random.random() < 0.5:
+            #if self.outputs[self.idx][i][0] == 0 and random.random() < 0.5:
             #    continue
-            #get an input
-            cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
-            cellImg = cellImg.rotate(math.floor(random.random() * 4) * 90) #randomly rotate
-            if random.random() > 0.5: #randomly flip
-                cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
-            if random.random() > 0.5: #randomly flip
-                cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
-            #cellImg = ImageOps.autocontrast(cellImg)
-            #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
-            data = np.array(list(cellImg.getdata())).astype(np.float32)
-            data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
-            inputs.append(data)
-            #get an output
-            outputs.append([1, 0] if self.cells[self.fileIdx][j][i] == 1 else [0, 1])
+            #add input and output to batch
+            inputs.append(self.inputs[self.idx][i])
+            outputs.append(self.outputs[self.idx][i])
             #update
             self.valuesGenerated += 1
             c += 1
@@ -116,115 +124,126 @@ class CoarseBatchProducer:
 class BatchProducer:
     """Produces input values for the detailed network"""
     VALUES_PER_IMAGE = 100
+    LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter, coarseX, coarseY, threshold):
-        self.filenames = [] #list of image files
-        self.boxes = []     #has the form [[x,y,x2,y2], ...], and specifies boxes for each image file
-        self.fileIdx = 0
-        self.image = None
+        self.cellFilter      = cellFilter
+        self.filenames       = None #list of image files
+        self.boxes           = []     #has the form [[x,y,x2,y2],...], specifying boxes in images
+        self.inputs          = None
+        self.outputs         = None
+        self.idx             = 0
         self.valuesGenerated = 0
-        self.unfilteredCells = None
-        self.coarseX = coarseX
-        self.coarseY = coarseY #allows using the coarse network to filter cells
-        self.threshold = threshold
+        self.coarseX         = coarseX
+        self.coarseY         = coarseY #allows using the coarse network to filter cells
+        self.threshold       = threshold
         #read 'dataFile'
-        filenameSet = set()
+        self.filenames = []
         boxesDict = dict()
-        filename = None
         with open(dataFile) as file:
+            filename = None
             for line in file:
                 if line[0] != " ":
                     filename = line.strip()
-                    filenameSet.add(filename)
-                    if not filename in boxesDict:
-                        boxesDict[filename] = []
+                    self.filenames.append(filename)
+                    boxesDict[filename] = []
+                elif filename == None:
+                    raise Exception("Invalid data file")
                 else:
                     boxesDict[filename].append([int(c) for c in line.strip().split(",")])
-        self.filenames = list(filenameSet)
-        random.shuffle(self.filenames)
-        self.boxes = [boxesDict[name] for name in self.filenames]
         if len(self.filenames) == 0:
             raise Exception("No filenames")
+        random.shuffle(self.filenames)
+        self.boxes = [boxesDict[name] for name in self.filenames]
+        #allocate inputs and outputs
+        self.inputs = [None for name in self.filenames]
+        self.outputs = [None for name in self.filenames]
+        #load images
+        for i in range(1 if self.LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
+            self.loadImage(i)
+    #load next image
+    def loadImage(self, i):
         #obtain PIL image
-        self.image = Image.open(self.filenames[self.fileIdx])
-        self.image = self.image.resize(
+        image = Image.open(self.filenames[i])
+        image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
         )
-        #obtain indices of non-filtered cells (used to randomly select a non-filtered cell)
-        rowSize = IMG_SCALED_WIDTH//INPUT_WIDTH
-        colSize = IMG_SCALED_HEIGHT//INPUT_HEIGHT
-        self.unfilteredCells = []
-        for row in range(len(cellFilter)):
-            for col in range(len(cellFilter[row])):
-                if cellFilter[row][col] == 0:
-                    self.unfilteredCells.append(col+row*rowSize)
-        if len(self.unfilteredCells) == 0:
-            raise Exception("No unfiltered cells")
-    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
-    def getBatch(self, size):
-        inputs = []
-        outputs = []
-        potentialInputs = []
-        potentialOutputs = []
-        while size > 0:
-            for i in range(size):
-                if self.valuesGenerated == self.VALUES_PER_IMAGE:
-                    #open next image file
-                    self.fileIdx += 1
-                    if self.fileIdx+1 > len(self.filenames):
-                        self.fileIdx = 0
-                    self.image = Image.open(self.filenames[self.fileIdx])
-                    self.image = self.image.resize(
-                        (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                        resample=Image.LANCZOS
-                    )
-                    self.valuesGenerated = 0
-                #randomly select a non-filtered grid cell
-                idx = self.unfilteredCells[
-                    math.floor(random.random() * len(self.unfilteredCells))
-                ]
-                rowSize = IMG_SCALED_WIDTH // INPUT_WIDTH
-                i = idx % rowSize
-                j = idx // rowSize
-                x = i*INPUT_WIDTH
-                y = j*INPUT_HEIGHT
-                #get an input
-                cellImg = self.image.crop((x, y, x+INPUT_WIDTH, y+INPUT_HEIGHT))
-                cellImg = cellImg.rotate(math.floor(random.random() * 4) * 90) #randomly rotate
-                if random.random() > 0.5: #randomly flip
-                    cellImg = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
-                if random.random() > 0.5: #randomly flip
-                    cellImg = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+        #get inputs and outputs
+        self.inputs[i] = []
+        self.outputs[i] = []
+        for row in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+            for col in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                if self.cellFilter[row][col] == 1:
+                    continue
+                #get cell image
+                cellImg = image.crop(
+                    (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
+                )
+                #filter with coarse network
+                coarseVal = self.coarseY.eval(feed_dict={self.coarseX: np.array(
+                    [
+                        np.array(list(cellImg.getdata())).astype(np.float32).reshape(
+                            (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
+                        )
+                    ]
+                )})
+                if coarseVal[0] > self.threshold:
+                    continue
+                #add cell image
                 #cellImg = ImageOps.autocontrast(cellImg)
                 #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
-                data = np.array(list(cellImg.getdata())).astype(np.float32)
-                data = data.reshape((INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS))
-                potentialInputs.append(data)
-                #get an output
-                topLeftX = x*IMG_DOWNSCALE + 15
-                topLeftY = y*IMG_DOWNSCALE + 15
-                bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE - 15
-                bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE - 15
+                #cellImg2 = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
+                #cellImg3 = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
+                cellImages = [
+                    cellImg,  cellImg.rotate(90),  cellImg.rotate(180),  cellImg.rotate(270)
+                    #, cellImg2, cellImg2.rotate(90), cellImg2.rotate(180), cellImg2.rotate(270)
+                    #, cellImg3, cellImg3.rotate(90), cellImg3.rotate(180), cellImg3.rotate(270)
+                ]
+                data = [
+                    np.array(list(img.getdata())).astype(np.float32).reshape(
+                        (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
+                    )
+                    for img in cellImages
+                ]
+                #get inputs and outputs
+                self.inputs[i] += data
+                MARGIN = 0
+                topLeftX = col*INPUT_WIDTH*IMG_DOWNSCALE + MARGIN
+                topLeftY = row*INPUT_HEIGHT*IMG_DOWNSCALE + MARGIN
+                bottomRightX = (col*INPUT_WIDTH+INPUT_WIDTH-1)*IMG_DOWNSCALE - MARGIN
+                bottomRightY = (row*INPUT_HEIGHT+INPUT_HEIGHT-1)*IMG_DOWNSCALE - MARGIN
                 hasOverlappingBox = False
-                for box in self.boxes[self.fileIdx]:
+                for box in self.boxes[self.idx]:
                     if (not box[2] < topLeftX and
                         not box[0] > bottomRightX and
                         not box[3] < topLeftY and
                         not box[1] > bottomRightY):
                         hasOverlappingBox = True
                         break
-                potentialOutputs.append([1, 0] if hasOverlappingBox else [0, 1])
-                #update
-                self.valuesGenerated += 1
-            #filter using coarse network
-            out = self.coarseY.eval(feed_dict={self.coarseX: np.array(potentialInputs)})
-            unfilteredIndices = [i for i in range(len(potentialInputs)) if out[i][0] < self.threshold]
-            inputs  += [potentialInputs[i] for i in unfilteredIndices]
-            outputs += [potentialOutputs[i] for i in unfilteredIndices]
+                self.outputs[i] += [[1,0] if hasOverlappingBox else [0,1]] * len(cellImages)
+        if len(self.inputs[i]) == 0:
+            raise Exception("No unfiltered cells for \"" + self.filenames[i] + "\"")
+    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
+    def getBatch(self, size):
+        inputs = []
+        outputs = []
+        c = 0
+        while c < size:
+            if self.valuesGenerated == self.VALUES_PER_IMAGE:
+                self.idx = (self.idx + 1) % len(self.inputs)
+                if self.LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
+                    self.loadImage(self.idx)
+                self.valuesGenerated = 0
+            #randomly select a non-filtered grid cell
+            i = math.floor(random.random() * len(self.inputs[self.idx]))
+            ##bias samples towards positive examples
+            #if self.outputs[self.idx][i][0] == 0 and random.random() < 0.5:
+            #    continue
+            #add input and output to batch
+            inputs.append(self.inputs[self.idx][i])
+            outputs.append(self.outputs[self.idx][i])
             #update
-            size -= len(unfilteredIndices)
-            potentialInputs = []
-            potentialOutputs = []
+            self.valuesGenerated += 1
+            c += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
-

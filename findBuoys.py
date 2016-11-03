@@ -98,6 +98,7 @@ saver = tf.train.Saver(tf.all_variables())
 
 #helper functions
 def train():
+    startTime = time.time()
     if useCoarseOnly: #train coarse network
         nodes = coarseNodes
         prod = CoarseBatchProducer(dataFile, cellFilter)
@@ -111,7 +112,6 @@ def train():
         feedDictDefaults = {p_dropout: 0.5}
         feedDictDefaultsAcc = {p_dropout: 1.0}
     #start training
-    startTime = time.time()
     for step in range(TRAINING_STEPS):
         inputs, outputs = prod.getBatch(TRAINING_BATCH_SIZE)
         feedDict = feedDictDefaults.copy()
@@ -149,6 +149,7 @@ def train():
             saver.save(sess, SAVE_FILE)
     summaryWriter.close()
 def test():
+    startTime = time.time()
     if useCoarseOnly: #test coarse network
         nodes = coarseNodes
         prod = CoarseBatchProducer(dataFile, cellFilter)
@@ -160,7 +161,6 @@ def test():
         summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/detailed', sess.graph)
         feedDictDefaults = {p_dropout: 1.0}
     #test
-    startTime = time.time()
     metrics = [] #[[accuracy, precision, recall], ...]
     for step in range(TESTING_STEPS):
         inputs, outputs = prod.getBatch(TESTING_BATCH_SIZE)
@@ -276,6 +276,7 @@ def run():
                 (time.time() - startTime, outputFilenames[fileIdx]))
 def genSamples(outputImg):
     NUM_SAMPLES = (20, 20)
+    startTime = time.time()
     if useCoarseOnly:
         prod = CoarseBatchProducer(dataFile, cellFilter)
     else:
@@ -284,7 +285,6 @@ def genSamples(outputImg):
     draw = ImageDraw.Draw(image, "RGBA")
     #get samples
     numPositive = 0
-    startTime = time.time()
     for i in range(NUM_SAMPLES[0]):
         for j in range(NUM_SAMPLES[1]):
             inputs, outputs = prod.getBatch(1)
