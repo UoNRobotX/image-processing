@@ -72,20 +72,38 @@ class CoarseBatchProducer:
         self.outputs[i] = []
         for row in range(len(self.cells[i])):
             for col in range(len(self.cells[i][row])):
+                #use static filter
                 if self.cellFilter[row][col] == 1:
                     continue
+                #get cell image
                 cellImg = image.crop(
                     (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
                 )
-                #cellImg = ImageOps.autocontrast(cellImg)
-                #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
-                #cellImg2 = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
-                #cellImg3 = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
-                cellImages = [
-                    cellImg,  cellImg.rotate(90),  cellImg.rotate(180),  cellImg.rotate(270)
-                    #, cellImg2, cellImg2.rotate(90), cellImg2.rotate(180), cellImg2.rotate(270)
-                    #, cellImg3, cellImg3.rotate(90), cellImg3.rotate(180), cellImg3.rotate(270)
-                ]
+                #preprocess image
+                cellImages = [cellImg]
+                if False: #maximise image contrast
+                    cellImg = ImageOps.autocontrast(cellImg)
+                if False: #blur image
+                    cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                if True: #add rotated images
+                    cellImages += [cellImg.rotate(180) for img in cellImages]
+                    cellImages += [cellImg.rotate(90) for img in cellImages]
+                if False: #add flip images
+                    cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
+                if False: #add sheared images
+                    shearFactor = random.random()*0.8 - 0.4
+                    cellImages += [
+                        img.transform(
+                            (img.size[0], img.size[1]),
+                            Image.AFFINE,
+                            data=(
+                                (1-shearFactor, shearFactor, 0, 0, 1, 0) if shearFactor>0 else
+                                (1+shearFactor, shearFactor, -shearFactor*img.size[0], 0, 1, 0)
+                            ),
+                            resample=Image.BICUBIC)
+                        for img in cellImages
+                    ]
+                #get inputs and outputs
                 data = [
                     np.array(list(img.getdata())).astype(np.float32).reshape(
                         (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
@@ -123,7 +141,7 @@ class CoarseBatchProducer:
 #class for producing detailed network input values from a training/test data file
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
-    VALUES_PER_IMAGE = 100
+    VALUES_PER_IMAGE = 300
     LOAD_IMAGES_ON_DEMAND = True
     #constructor
     def __init__(self, dataFile, cellFilter):
@@ -171,30 +189,44 @@ class DetailedBatchProducer:
         self.outputs[i] = []
         for row in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
             for col in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                #use static filter
                 if self.cellFilter[row][col] == 1:
                     continue
                 #get cell image
                 cellImg = image.crop(
                     (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
                 )
-                #TODO: filter with coarse network
-                #add cell image
-                #cellImg = ImageOps.autocontrast(cellImg)
-                #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
-                #cellImg2 = cellImg.transpose(Image.FLIP_LEFT_RIGHT)
-                #cellImg3 = cellImg.transpose(Image.FLIP_TOP_BOTTOM)
-                cellImages = [
-                    cellImg,  cellImg.rotate(90),  cellImg.rotate(180),  cellImg.rotate(270)
-                    #, cellImg2, cellImg2.rotate(90), cellImg2.rotate(180), cellImg2.rotate(270)
-                    #, cellImg3, cellImg3.rotate(90), cellImg3.rotate(180), cellImg3.rotate(270)
-                ]
+                #TODO: filter with coarse network?
+                #preprocess image
+                if False: #maximise image contrast
+                    cellImg = ImageOps.autocontrast(cellImg)
+                if False: #blur image
+                    cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                if True: #add rotated images
+                    cellImages += [cellImg.rotate(180) for img in cellImages]
+                    cellImages += [cellImg.rotate(90) for img in cellImages]
+                if False: #add flip images
+                    cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
+                if False: #add sheared images
+                    shearFactor = random.random()*0.8 - 0.4
+                    cellImages += [
+                        img.transform(
+                            (img.size[0], img.size[1]),
+                            Image.AFFINE,
+                            data=(
+                                (1-shearFactor, shearFactor, 0, 0, 1, 0) if shearFactor>0 else
+                                (1+shearFactor, shearFactor, -shearFactor*img.size[0], 0, 1, 0)
+                            ),
+                            resample=Image.BICUBIC)
+                        for img in cellImages
+                    ]
+                #get inputs and outputs
                 data = [
                     np.array(list(img.getdata())).astype(np.float32).reshape(
                         (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
                     )
                     for img in cellImages
                 ]
-                #get inputs and outputs
                 self.inputs[i] += data
                 MARGIN = 10
                 topLeftX = col*INPUT_WIDTH*IMG_DOWNSCALE + MARGIN
