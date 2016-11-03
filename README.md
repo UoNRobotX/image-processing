@@ -18,61 +18,33 @@
 
 ## Generating the images.
 1. Create a videos/ directory, and place the videos in it.
-2. `./genImages.sh`
+2. `./main.sh generate`
 
 ## Creating training/testing data.
-1. Label the grid cells to use for the filter (used to ignore camera boundaries, WAM-V 'roof', etc).
-    * `python3 mark_images.py filter -d images -o filterData.txt`
-2. Label water grid cells (used to train/test coarse network).
-    * `python3 mark_images.py coarse -d images -o data.txt`
-3. Split the coarse network data into training and test sets.
-    * `csplit data.txt '/125\.jpg/' -s`
-    * `mv xx00 trainingDataCoarse.txt`
-    * `mv xx01 testingDataCoarse.txt`
-    * `rm data.txt`
-4. Label buoy boxes.
-    * `python3 mark_images.py detailed -d images -o data.txt`
-5. Split the data into training and test sets.
-    * `csplit data.txt '/125\.jpg/' -s`
-    * `mv xx00 trainingData.txt`
-    * `mv xx01 testingData.txt`
-    * `rm data.txt`
+* Label static filter: `./main.sh mark filter`
+* Label coarse network data: `./main.sh mark coarse`
+* Label detailed network data: `./main.sh mark detailed`
 
 ## Viewing the training/testing data.
-* View filter.
-    * `python3 mark_images.py filter -d images -l filterData.txt >/dev/null`
-* View labelled water grid cells.
-    * `python3 mark_images.py coarse -d images -l trainingDataCoarse.txt >/dev/null`
-* View labelled boxes.
-    * `python3 mark_images.py detailed -d images -l trainingData.txt >/dev/null`
+* View filter: `./main.sh view filter`
+* View coarse training data: `./main.sh view coarse`
+* View detailed training data: `./main.sh view detailed`
 
 ## Working with the coarse network.
-* Train the coarse network, for 100 steps.
-    * `python3 use_network.py train trainingDataCoarse.txt filterData.txt -c -s 100`
-* Test the coarse network.
-    * `python3 use_network.py test testingDataCoarse.txt filterData.txt -c`
-* View the results of running the coarse network on an image.
-    * `python3 use_network.py run images/076.jpg filterData.txt -c -o out.jpg`
-    * View out.jpg
-* View sample coarse network inputs.
-    * `python3 use_network.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg`
-    * View out.jpg
-* View graph and training/testing statistics with tensorboard.
+* Train the coarse network, for 100 steps: `./main.sh train coarse`
+* Test the coarse network: `./main.sh test coarse`
+* Run the coarse network on a random image: `./main.sh run coarse`
+* Generate sample coarse network inputs: `./main.sh samples coarse`
+* View graph and training/testing statistics with tensorboard:
     * The coarse should have been trained or tested at least once.
     * `tensorboard --logdir=coarseSummaries`
     * Open a browser to localhost:6006
 
 ## Working with the whole network.
-* Train the network, for 100 steps.
-    * `python3 use_network.py train trainingData.txt filterData.txt -s 100`
-* Test the network.
-    * `python3 use_network.py test testingData.txt filterData.txt`
-* View the results of running the network on an image.
-    * `python3 use_network.py run images/076.jpg filterData.txt -o out.jpg`
-    * View out.jpg
-* View sample network inputs.
-    * `python3 use_network.py samples trainingData.txt filterData.txt -o out.jpg`
-    * View out.jpg
+* Train the detailed network, for 100 steps: `./main.sh train detailed`
+* Test the detailed network: `./main.sh test detailed`
+* Run the detailed network on a random image: `./main.sh run detailed`
+* Generate sample detailed network inputs: `./main.sh samples detailed`
 * View graph and training/testing statistics with tensorboard.
     * The detailed network should have been trained or tested at least once.
     * `tensorboard --logdir=detailedSummaries`

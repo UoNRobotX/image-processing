@@ -26,9 +26,10 @@ def loadFilterData(loadFile):
             Each element denotes a row of cells, where 1 indicates a filtered cell.
     """
     cellFilter = []
-    with open(loadFile) as file:
-        for line in file:
-            cellFilter.append([int(c) for c in line.strip()])
+    if os.path.exists(loadFile):
+        with open(loadFile) as file:
+            for line in file:
+                cellFilter.append([int(c) for c in line.strip()])
     return cellFilter
 
 def loadCoarseSet(loadFile, fileMarks):
@@ -38,16 +39,17 @@ def loadCoarseSet(loadFile, fileMarks):
             fileMarks[filename] may have the form [[0, 1, ...], ...].
                 Each element denotes a row of cells, where 1 indicates a cell containing only water.
     """
-    filename = None
-    with open(loadFile) as file:
-        for line in file:
-            if line[0] != " ":
-                filename = line.strip()
-                fileMarks[filename] = []
-            elif filename != None:
-                fileMarks[filename].append([int(c) for c in line.strip()])
-            else:
-                raise Exception("Invalid coarse set file format")
+    if os.path.exists(loadFile):
+        with open(loadFile) as file:
+            filename = None
+            for line in file:
+                if line[0] != " ":
+                    filename = line.strip()
+                    fileMarks[filename] = []
+                elif filename != None:
+                    fileMarks[filename].append([int(c) for c in line.strip()])
+                else:
+                    raise Exception("Invalid coarse set file format")
     return fileMarks
 
 def loadDetailedSet(loadFile, fileMarks):
@@ -57,14 +59,15 @@ def loadDetailedSet(loadFile, fileMarks):
             fileMarks[filename] may have the form [[x,y,x,y], ...].
                 Each element denotes a bounding box's top-left and bottom-right.
     """
-    filename = None
-    with open(loadFile) as file:
-        for line in file:
-            if line[0] != " ":
-                filename = line.strip()
-                fileMarks[filename] = []
-            elif filename != None:
-                fileMarks[filename].append([int(c) for c in line.strip().split(",")])
-            else:
-                raise Exception("Invalid detailed set file format")
+    if os.path.exists(loadFile):
+        with open(loadFile) as file:
+            filename = None
+            for line in file:
+                if line[0] != " ":
+                    filename = line.strip()
+                    fileMarks[filename] = []
+                elif filename != None:
+                    fileMarks[filename].append([int(c) for c in line.strip().split(",")])
+                else:
+                    raise Exception("Invalid detailed set file format")
     return fileMarks
