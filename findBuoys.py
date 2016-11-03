@@ -4,7 +4,7 @@ from PIL import Image, ImageDraw
 import tensorflow as tf
 
 from constants import *
-from findBuoys_input import getCellFilter, CoarseBatchProducer, BatchProducer
+from findBuoys_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
 from findBuoys_net import createCoarseNetwork, createDetailedNetwork
 
 #process command line arguments
@@ -107,7 +107,7 @@ def train():
         feedDictDefaultsAcc = {}
     else: #train detailed network
         nodes = detailedNodes
-        prod = BatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
+        prod = DetailedBatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
         summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/train/detailed', sess.graph)
         feedDictDefaults = {p_dropout: 0.5}
         feedDictDefaultsAcc = {p_dropout: 1.0}
@@ -157,7 +157,7 @@ def test():
         feedDictDefaults = {}
     else: #test detailed network
         nodes = detailedNodes
-        prod = BatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
+        prod = DetailedBatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
         summaryWriter = tf.train.SummaryWriter(SUMMARIES_DIR + '/test/detailed', sess.graph)
         feedDictDefaults = {p_dropout: 1.0}
     #test
@@ -280,7 +280,7 @@ def genSamples(outputImg):
     if useCoarseOnly:
         prod = CoarseBatchProducer(dataFile, cellFilter)
     else:
-        prod = BatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
+        prod = DetailedBatchProducer(dataFile, cellFilter, x, coarseNodes.y, threshold)
     image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
     draw = ImageDraw.Draw(image, "RGBA")
     #get samples

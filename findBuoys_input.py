@@ -121,7 +121,7 @@ class CoarseBatchProducer:
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 #class for producing detailed network input values from a training/test data file
-class BatchProducer:
+class DetailedBatchProducer:
     """Produces input values for the detailed network"""
     VALUES_PER_IMAGE = 100
     LOAD_IMAGES_ON_DEMAND = True
