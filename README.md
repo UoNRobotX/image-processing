@@ -57,6 +57,10 @@
 * View sample coarse network inputs.
     * `python3 findBuoys.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg`
     * View out.jpg
+* View graph and training/testing statistics with tensorboard.
+    * The coarse should have been trained or tested at least once.
+    * `tensorboard --logdir=coarseSummaries`
+    * Open a browser to localhost:6006
 
 ## Working with the whole network.
 * Train the network, for 100 steps.
@@ -69,8 +73,8 @@
 * View sample network inputs.
     * `python3 findBuoys.py samples trainingData.txt filterData.txt -o out.jpg`
     * View out.jpg
+* View graph and training/testing statistics with tensorboard.
+    * The detailed network should have been trained or tested at least once.
+    * `tensorboard --logdir=detailedSummaries`
+    * Open a browser to localhost:6006
 
-## Viewing graph and training/testing statistics with tensorboard.
-* The coarse or detailed network should have been trained or tested at least once.
-* `tensorboard --logdir=summaries`
-* Open a browser to localhost:6006

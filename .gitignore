@@ -1,5 +1,7 @@
 images_boxed
 images_marked
-modelData/*
-summaries
+coarseModel/*
+detailedModel/*
+coarseSummaries
+detailedSummaries
 videos

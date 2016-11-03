@@ -126,7 +126,7 @@ class DetailedBatchProducer:
     VALUES_PER_IMAGE = 100
     LOAD_IMAGES_ON_DEMAND = True
     #constructor
-    def __init__(self, dataFile, cellFilter, coarseX, coarseY, threshold):
+    def __init__(self, dataFile, cellFilter):
         self.cellFilter      = cellFilter
         self.filenames       = None #list of image files
         self.boxes           = []     #has the form [[x,y,x2,y2],...], specifying boxes in images
@@ -134,9 +134,6 @@ class DetailedBatchProducer:
         self.outputs         = None
         self.idx             = 0
         self.valuesGenerated = 0
-        self.coarseX         = coarseX
-        self.coarseY         = coarseY #allows using the coarse network to filter cells
-        self.threshold       = threshold
         #read 'dataFile'
         self.filenames = []
         boxesDict = dict()
@@ -180,16 +177,7 @@ class DetailedBatchProducer:
                 cellImg = image.crop(
                     (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
                 )
-                #filter with coarse network
-                coarseVal = self.coarseY.eval(feed_dict={self.coarseX: np.array(
-                    [
-                        np.array(list(cellImg.getdata())).astype(np.float32).reshape(
-                            (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
-                        )
-                    ]
-                )})
-                if coarseVal[0] > self.threshold:
-                    continue
+                #TODO: filter with coarse network
                 #add cell image
                 #cellImg = ImageOps.autocontrast(cellImg)
                 #cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
@@ -208,7 +196,7 @@ class DetailedBatchProducer:
                 ]
                 #get inputs and outputs
                 self.inputs[i] += data
-                MARGIN = 0
+                MARGIN = 10
                 topLeftX = col*INPUT_WIDTH*IMG_DOWNSCALE + MARGIN
                 topLeftY = row*INPUT_HEIGHT*IMG_DOWNSCALE + MARGIN
                 bottomRightX = (col*INPUT_WIDTH+INPUT_WIDTH-1)*IMG_DOWNSCALE - MARGIN
