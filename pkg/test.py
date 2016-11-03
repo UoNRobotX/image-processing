@@ -5,8 +5,8 @@ from .constants import *
 from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
 from .networks import createCoarseNetwork, createDetailedNetwork
 
-TESTING_LOG_PERIOD = 10
-TESTING_RUN_PERIOD = 10
+TESTING_LOG_PERIOD = 50
+TESTING_RUN_PERIOD = 50
 
 def test(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold):
     startTime = time.time()

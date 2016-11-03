@@ -11,20 +11,24 @@ description = """
     By default, network values are loaded from files if they exist.
     By default, the detailed network is operated on.
     "mode1" specifies an action:
-        train file1
-            Train the detailed (or coarse) network, using training data.
-        test file1
+        train file1 file2 [file3]
+            Train the detailed (or coarse) network, using training data from "file1".
+            "file2" specifies testing data that is evaluated periodically.
+            "file3", if present, specifies a cell filter to use.
+        test file1 [file2]
             Test detailed (or coarse) network, using testing data.
-        run file1
+            "file2", if present, specifies a cell filter to use.
+        run file1 [file2]
             Run the detailed (or coarse) network on an input image.
                 By default, the output is written to "out.jpg".
+                If running the detailed network, the coarse network is still used.
             A directory may be specified, in which case JPG files in it are used.
                 By default, the outputs are written to same-name files.
-        samples file1
+            "file2", if present, specifies a cell filter to use.
+        samples file1 [file2]
             Generate input samples for the detailed (or coarse) network.
                 By default, the output is written to "out.jpg".
-    If operating on the detailed network, the coarse network is still used to filter input.
-    If "file2" is present, it specifies a cell filter to use.
+            "file2", if present, specifies a cell filter to use.
 """
 parser = argparse.ArgumentParser(
     description=description,
@@ -33,6 +37,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("mode", metavar="mode1", choices=["train", "test", "run", "samples"])
 parser.add_argument("file1")
 parser.add_argument("file2", nargs="?")
+parser.add_argument("file3", nargs="?")
 parser.add_argument("-c", dest="useCoarseOnly", action="store_true", \
     help="Operate on the coarse network.")
 parser.add_argument("-n", dest="reinitialise",  action="store_true", \
@@ -47,11 +52,14 @@ parser.add_argument("-t", dest="threshold", type=float, \
         The default is 0.5.\
         If running on input images, causes positive prediction cells to be fully colored.")
 args = parser.parse_args()
+if args.mode == "train" and args.file2 == None or args.mode != "train" and args.file3 != None:
+    raise Exception("Invalid number of specified files")
 
 #set variables from command line arguments
 mode           = args.mode
 dataFile       = args.file1
-filterFile     = args.file2
+dataFile2      = args.file2 if mode == "train" else None
+filterFile     = args.file3 if mode == "train" else args.file2
 useCoarseOnly  = args.useCoarseOnly
 reinitialise   = args.reinitialise
 numSteps       = args.numSteps
@@ -67,7 +75,7 @@ if threshold <= 0 or threshold >= 1:
 
 #use graph
 if mode == "train":
-    train(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold)
+    train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, numSteps, threshold)
 elif mode == "test":
     test(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold)
 elif mode == "run":

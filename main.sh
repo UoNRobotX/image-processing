@@ -87,10 +87,12 @@ case "$CMD" in
     "train")
         case "$SUBCMD" in
             "coarse")
-                python3 use_network.py train trainingDataCoarse.txt filterData.txt -c -s 100 "$@"
+                python3 use_network.py train \
+                    trainingDataCoarse.txt testingDataCoarse.txt filterData.txt -c -s 100 "$@"
             ;;
             "detailed")
-                python3 use_network.py train trainingData.txt filterData.txt -s 100 "$@"
+                python3 use_network.py train \
+                    trainingData.txt testingData.txt filterData.txt -s 100 "$@"
             ;;
             *)
                 echo "$USAGE"
