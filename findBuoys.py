@@ -10,7 +10,7 @@ description = """
     Loads/trains/tests/runs the coarse/detailed networks.
     By default, network values are loaded from files if they exist.
     By default, the detailed network is operated on.
-    'mode1' specifies an action:
+    "mode1" specifies an action:
         train file1
             Train the detailed (or coarse) network, using training data.
         test file1
@@ -24,7 +24,7 @@ description = """
             Generate input samples for the detailed (or coarse) network.
                 By default, the output is written to "out.jpg".
     If operating on the detailed network, the coarse network is still used to filter input.
-    If 'file2' is present, it specifies a cell filter to use.
+    If "file2" is present, it specifies a cell filter to use.
 """
 parser = argparse.ArgumentParser(
     description=description,

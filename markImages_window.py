@@ -21,7 +21,7 @@ class Window:
         self.sel           = [[0,0], [0,0]] #corner positions of a box created while dragging the mouse
         self.box           = None   #holds the ID of a rectangle shown while dragging the mouse
         self.boxCoords     = []     #[[x,y,x,y], ...], describes created boxes or marked cells
-        self.boxIDs        = []     #holds IDs of elements in 'boxCoords'
+        self.boxIDs        = []     #holds IDs of elements in "boxCoords"
         self.cells         = []     #cells[col][row] is an ID or None, indicating cell marked-ness
         self.mouseDownCell = [0, 0] #specifies the last cell the mouse was in while held down
         #skip to a file if requested
@@ -253,7 +253,7 @@ class Window:
         self.markCoarseNextCallback(None, forward=False)
     def markFilterEscapeCallback(self, event=None):
         #output filter info
-        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
         for row in range(len(self.cells[0])):
             for col in range(len(self.cells)):
                 print("0" if self.cells[col][row] == None else "1", end="", file=f)
@@ -292,7 +292,7 @@ class Window:
                 for row in range(len(self.cells[0]))
             ]
         #output info
-        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
         for filename in self.filenames:
             if self.fileMarks[filename] != None:
                 print(filename, file=f)
@@ -346,7 +346,7 @@ class Window:
         if abs(self.sel[0][0] - self.sel[1][0]) < MIN_SIZE or \
             abs(self.sel[0][1] - self.sel[1][1]) < MIN_SIZE:
             return
-        #make 'sel' contain top-left and bottom-right
+        #make "sel" contain top-left and bottom-right
         if self.sel[0][0] > self.sel[1][0]:
             temp = self.sel[0][0]
             self.sel[0][0] = self.sel[1][0]
@@ -436,7 +436,7 @@ class Window:
         if self.fileIdx < len(self.filenames):
             self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
         #output box info
-        f = sys.stdout if self.outputFile == None else open(self.outputFile, 'w')
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
         for filename in self.filenames:
             if self.fileMarks[filename] != None:
                 print(filename, file=f)

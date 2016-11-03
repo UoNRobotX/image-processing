@@ -39,11 +39,11 @@ def createCoarseNetwork(threshold):
     with graph.as_default():
         inputChannels = INPUT_CHANNELS
         #input nodes
-        with tf.name_scope('input'): #group nodes for easier viewing with tensorboard
+        with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
             x = tf.placeholder(tf.float32, \
-                [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name='x_input')
-            y_ = tf.placeholder(tf.float32, [None, 2], name='y_input')
-            p_dropout = tf.placeholder(tf.float32, name='p_dropout') #currently unused
+                [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name="x_input")
+            y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
+            p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
         with tf.name_scope("input_reshape"):
             x_flat = x
             grayscale = True #RGB -> grayscale
@@ -120,10 +120,10 @@ def createDetailedNetwork():
     graph = tf.Graph()
     with graph.as_default():
         #input nodes
-        with tf.name_scope('input'): #group nodes for easier viewing with tensorboard
-            x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name='x_input')
-            y_ = tf.placeholder(tf.float32, [None, 2], name='y_input')
-            p_dropout = tf.placeholder(tf.float32, name='p_dropout')
+        with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
+            x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name="x_input")
+            y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
+            p_dropout = tf.placeholder(tf.float32, name="p_dropout")
         addSummaries(x, summaries, "input", "image")
         #first convolutional layer
         with tf.name_scope("conv_layer1"):

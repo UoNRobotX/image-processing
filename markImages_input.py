@@ -32,8 +32,8 @@ def loadFilterData(loadFile):
     return cellFilter
 
 def loadCoarseSet(loadFile, fileMarks):
-    """ Reads coarse set data from 'loadFile', adding it to 'fileMarks'.
-        'fileMarks' should map filenames to mark information.
+    """ Reads coarse set data from "loadFile", adding it to "fileMarks".
+        "fileMarks" should map filenames to mark information.
             fileMarks[filename] may be None, indicating no mark information.
             fileMarks[filename] may have the form [[0, 1, ...], ...].
                 Each element denotes a row of cells, where 1 indicates a cell containing only water.
@@ -51,8 +51,8 @@ def loadCoarseSet(loadFile, fileMarks):
     return fileMarks
 
 def loadDetailedSet(loadFile, fileMarks):
-    """ Reads detailed set data from 'loadFile', adding it to 'fileMarks'.
-        'fileMarks' should map filenames to mark information.
+    """ Reads detailed set data from "loadFile", adding it to "fileMarks".
+        "fileMarks" should map filenames to mark information.
             fileMarks[filename] may be None, indicating no mark information.
             fileMarks[filename] may have the form [[x,y,x,y], ...].
                 Each element denotes a bounding box's top-left and bottom-right.

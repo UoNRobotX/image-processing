@@ -5,7 +5,7 @@ from PIL import Image, ImageFilter, ImageOps
 from constants import *
 
 def getCellFilter(filterFile):
-    """ Obtains filter data from 'filterFile', or uses an empty filter.
+    """ Obtains filter data from "filterFile", or uses an empty filter.
         Returns a list with the form [[0, 1, ...], ...].
             Each element denotes a row of cells, where 1 indicates a filtered cell.
     """
@@ -35,7 +35,7 @@ class CoarseBatchProducer:
         self.outputs         = None
         self.idx             = 0
         self.valuesGenerated = 0
-        #read 'dataFile'
+        #read "dataFile"
         self.filenames = []
         cellsDict = dict()
         with open(dataFile) as file:
@@ -115,7 +115,7 @@ class CoarseBatchProducer:
                 self.outputs[fileIdx] += [[1,0] if containsWater else [0,1]] * len(cellImages)
         if len(self.inputs[fileIdx]) == 0:
             raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
-    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
+    #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
@@ -153,7 +153,7 @@ class DetailedBatchProducer:
         self.outputs         = None
         self.idx             = 0
         self.valuesGenerated = 0
-        #read 'dataFile'
+        #read "dataFile"
         self.filenames = []
         boxesDict = dict()
         with open(dataFile) as file:
@@ -269,7 +269,7 @@ class DetailedBatchProducer:
                 self.outputs[fileIdx] += [[1,0] if hasOverlappingBox else [0,1]] * len(cellImages)
         if len(self.inputs[fileIdx]) == 0:
             raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
-    #returns a tuple containing a numpy array of 'size' inputs, and a numpy array of 'size' outputs
+    #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
         outputs = []

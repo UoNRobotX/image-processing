@@ -13,7 +13,7 @@ description = """
     Pressing right/left causes the next/previous image to be displayed.
     By default, information about the markings is written to stdout.
 
-    'mode1' may be one of the following:
+    "mode1" may be one of the following:
         filter
             The user marks grid cells to be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether it is marked.

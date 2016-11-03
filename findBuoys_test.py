@@ -15,12 +15,12 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold)
     if useCoarseOnly: #test coarse network
         net = createCoarseNetwork(threshold)
         prod = CoarseBatchProducer(dataFile, cellFilter)
-        summaryWriter = tf.train.SummaryWriter(COARSE_SUMMARIES + '/test', net.graph)
+        summaryWriter = tf.train.SummaryWriter(COARSE_SUMMARIES + "/test", net.graph)
         saveFile = COARSE_SAVE_FILE
     else: #test detailed network
         net = createDetailedNetwork()
         prod = DetailedBatchProducer(dataFile, cellFilter)
-        summaryWriter = tf.train.SummaryWriter(DETAILED_SUMMARIES + '/test', net.graph)
+        summaryWriter = tf.train.SummaryWriter(DETAILED_SUMMARIES + "/test", net.graph)
         saveFile = DETAILED_SAVE_FILE
     with tf.Session(graph=net.graph) as sess:
         #reinitialise or load values
@@ -41,7 +41,7 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold)
                     options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
                     run_metadata=run_metadata
                 )
-                summaryWriter.add_run_metadata(run_metadata, 'step%03d' % step)
+                summaryWriter.add_run_metadata(run_metadata, "step%03d" % step)
             else:
                 summary, acc, prec, rec = sess.run(
                     [net.summaries, net.accuracy, net.precision, net.recall],
