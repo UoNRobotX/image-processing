@@ -4,7 +4,7 @@ from constants import *
 
 class NetworkNodes:
     """ Holds nodes of a tensorflow network """
-    def __init__(self, graph, x, y_, p_dropout, y, accuracy, precision, recall, train, variables, summaries):
+    def __init__(self, graph, x, y_, p_dropout, y, accuracy, precision, recall, train, summaries):
         self.graph = graph
         self.x = x
         self.y_ = y_
@@ -14,27 +14,23 @@ class NetworkNodes:
         self.precision = precision
         self.recall = recall
         self.train = train
-        self.variables = variables
         self.summaries = tf.merge_summary(summaries)
 
 def createCoarseNetwork(threshold):
     #helper functions
-    def createLayer(input, inSize, outSize, layerName, variables, summaries):
+    def createLayer(input, inSize, outSize, layerName, summaries):
         with tf.name_scope(layerName):
             with tf.name_scope("weights"):
                 w = tf.Variable(
                     tf.truncated_normal([inSize, outSize], stddev=0.5)
                 )
-                variables.append(w)
                 addSummaries(w, summaries, layerName + "/weights", "mean_stddev_hist")
             with tf.name_scope("biases"):
                 b = tf.Variable(tf.constant(0.1, shape=[outSize]))
-                variables.append(b)
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
             return tf.nn.sigmoid(tf.matmul(input, w) + b, "out")
     #create nodes
     summaries = []
-    variables = []
     graph = tf.Graph()
     with graph.as_default():
         inputChannels = INPUT_CHANNELS
@@ -55,13 +51,13 @@ def createCoarseNetwork(threshold):
             addSummaries(x, summaries, "input", "image")
         #hidden and output layers
         h = createLayer(
-            x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 30, "hidden_layer", variables, summaries
+            x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 30, "hidden_layer", summaries
         )
         y = createLayer(
-            h, 30, 1, "output_layer", variables, summaries
+            h, 30, 1, "output_layer", summaries
         )
         #y = createLayer(
-        #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 1, "output_layer", variables, summaries
+        #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 1, "output_layer", summaries
         #)
         y2 = tf.slice(y_, [0, 0], [-1, 1])
         #cost
@@ -97,7 +93,7 @@ def createCoarseNetwork(threshold):
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, variables, summaries)
+    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def createDetailedNetwork():
     #helper functions
@@ -116,7 +112,6 @@ def createDetailedNetwork():
             return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
     #create nodes
     summaries = []
-    variables = []
     graph = tf.Graph()
     with graph.as_default():
         #input nodes
@@ -133,7 +128,6 @@ def createDetailedNetwork():
             p1 = createPool(c1)
             #addSummaries(w1, summaries, "conv_layer1", "mean_stddev_hist")
             #addSummaries(b1, summaries, "conv_layer1", "mean_stddev_hist")
-            variables += [w1, b1]
         #second convolutional layer
         with tf.name_scope("conv_layer2"):
             w2 = createWeights([5, 5, 32, 64])
@@ -142,7 +136,6 @@ def createDetailedNetwork():
             p2 = createPool(c2)
             #addSummaries(w2, summaries, "conv_layer2", "mean_stddev_hist")
             #addSummaries(b2, summaries, "conv_layer2", "mean_stddev_hist")
-            variables += [w2, b2]
         #densely connected layer
         with tf.name_scope("dense_layer"):
             w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
@@ -151,7 +144,6 @@ def createDetailedNetwork():
             h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
             #addSummaries(w3, summaries, "dense_layer", "mean_stddev_hist")
             #addSummaries(b3, summaries, /dense_layer", "mean_stddev_hist")
-            variables += [w3, b3]
         #dropout
         h1_dropout = tf.nn.dropout(h1, p_dropout)
         #readout layer
@@ -159,7 +151,6 @@ def createDetailedNetwork():
             w4 = createWeights([1024, 2])
             b4 = createBiases([2])
             y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
-            variables += [w4, b4]
         #cost
         with tf.name_scope("cost"):
             cost = tf.reduce_mean(
@@ -197,7 +188,7 @@ def createDetailedNetwork():
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, variables, summaries)
+    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def addSummaries(node, summaries, name, method):
     """
