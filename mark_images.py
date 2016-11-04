@@ -11,6 +11,7 @@ description = """
 
     Then, each image is displayed, and the user may mark them using the mouse.
     Pressing right/left causes the next/previous image to be displayed.
+    Pressing escape exits the application.
     By default, information about the markings is written to stdout.
 
     "mode1" may be one of the following:

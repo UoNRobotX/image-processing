@@ -24,7 +24,8 @@ description = """
             Run the detailed (or coarse) network on an input image "file1".
                 By default, the output is written to "out.jpg".
                 If running the detailed network, the coarse network is still used.
-            A directory may be specified, in which case JPG files in it are used.
+            The output file may be a .txt file: the output resembles training/testing data.
+            The output file may be a directory: JPG files in it are used.
                 By default, the outputs are written to same-name files.
             "file2", if present, specifies a cell filter to use.
         samples file1 [file2]
@@ -49,7 +50,10 @@ parser.add_argument("-s", dest="numSteps", type=int, default=100, \
 parser.add_argument("-o", dest="outFile", \
     help="When training, specifies binary files (*_train.npz and *_test.npz) to write data to.\
         When testing, specifies a binary file (*.npz) to write data to.\
-        When running or generating samples, specifies the output image file or directory. ")
+        When running or generating samples, specifies the output image file.\
+        When running, specifying a .txt file causes the output to resemble training data.\
+        When running, specifying a directory causes .jpg files in it to be used \
+        (by default, output is written to same-name files).")
 parser.add_argument("-t", dest="threshold", type=float, \
     help="Affects the precision-recall tradeoff.\
         If operating on the coarse network, positive predictions will be those above this value.\

@@ -7,12 +7,15 @@ from .constants import *
 from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
 from .networks import createCoarseNetwork, createDetailedNetwork
 
-def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold, thresholdGiven):
+def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, thresholdGiven):
     startTime = time.time()
+    textOutput = [] if re.search(r"\.txt$", outFile) != None else None
+    if textOutput != None and not useCoarseOnly:
+        raise Exception("Text output not implemented for detailed network")
     #get input files
     if os.path.isfile(dataFile):
         filenames = [dataFile]
-        outputFilenames = [outputImg or "out.jpg"]
+        outputFilenames = [outFile or "out.jpg"]
     elif os.path.isdir(dataFile):
         filenames = [
             dataFile + "/" + name for
@@ -20,12 +23,13 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold,
             os.path.isfile(dataFile + "/" + name) and re.search(r"\.jpg$", name)
         ]
         filenames.sort()
-        outputDir = outputImg or dataFile
-        if not os.path.exists(outputDir):
-            os.mkdir(outputDir)
-        elif not os.path.isdir(outputDir):
-            raise Exception("Invalid output directory")
-        outputFilenames = [outputDir + "/" + os.path.basename(name) for name in filenames]
+        if textOutput == None:
+            outputDir = outFile or dataFile
+            if not os.path.exists(outputDir):
+                os.mkdir(outputDir)
+            elif not os.path.isdir(outputDir):
+                raise Exception("Invalid output directory")
+            outputFilenames = [outputDir + "/" + os.path.basename(name) for name in filenames]
     else:
         raise Exception("Invalid input file")
     #initialise
@@ -67,7 +71,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold,
                             INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
                         out = coarseNet.y.eval(feed_dict={coarseNet.x: d, coarseNet.p_dropout: 1.0})
                         if useCoarseOnly:
-                            p[i][j] = out[0] > threshold if thresholdGiven else out[0]
+                            p[i][j] = out[0]
                         elif out[0] > threshold:
                             p[i][j] = -1
         if not useCoarseOnly:
@@ -87,27 +91,44 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold,
                                 detailedNet.x: d, detailedNet.p_dropout: 1.0
                             })
                             p[i][j] = out[0][0]
-        #write results to image file
-        draw = ImageDraw.Draw(image, "RGBA")
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                #draw a rectangle, indicating confidence, coarse filtering, or filtering
-                rect = [
-                    INPUT_WIDTH*IMG_DOWNSCALE*j,
-                    INPUT_HEIGHT*IMG_DOWNSCALE*i,
-                    INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                    INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                ]
-                #draw a grid cell outline
-                draw.rectangle(rect, outline=(0,0,0,255))
-                if p[i][j] >= 0:
-                    rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j]))
-                    draw.rectangle(rect, fill=(0,255,0,96))
-                elif p[i][j] == -1:
-                    draw.rectangle(rect, fill=(196,128,0,96))
-                else:
-                    draw.rectangle(rect, fill=(196,0,0,96))
-        #save the image, and print info
-        image.save(outputFilenames[fileIdx])
-        print("Time taken: %.2f secs, image written to %s" % \
-            (time.time() - startTime, outputFilenames[fileIdx]))
+        #output results
+        if textOutput != None:
+            textOutput.append(filenames[fileIdx])
+            for row in p:
+                line = ["1" if cell > threshold else "0" for cell in row]
+                textOutput.append(" " + "".join(line))
+            print("%7.2f secs - processed %s " % \
+                (time.time() - startTime, filenames[fileIdx]))
+        else:
+            #write results to image file
+            draw = ImageDraw.Draw(image, "RGBA")
+            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                    #draw a rectangle, indicating confidence, coarse filtering, or filtering
+                    rect = [
+                        INPUT_WIDTH*IMG_DOWNSCALE*j,
+                        INPUT_HEIGHT*IMG_DOWNSCALE*i,
+                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
+                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
+                    ]
+                    #draw a grid cell outline
+                    draw.rectangle(rect, outline=(0,0,0,255))
+                    if p[i][j] >= 0:
+                        if not thresholdGiven:
+                            rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j]))
+                            draw.rectangle(rect, fill=(0,255,0,96))
+                        elif p[i][j] > threshold:
+                            draw.rectangle(rect, fill=(0,255,0,96))
+                    elif p[i][j] == -1:
+                        draw.rectangle(rect, fill=(196,128,0,96))
+                    else:
+                        draw.rectangle(rect, fill=(196,0,0,96))
+            #save the image, and print info
+            image.save(outputFilenames[fileIdx])
+            print("%7.2f secs - wrote image %s" % \
+                (time.time() - startTime, outputFilenames[fileIdx]))
+    if textOutput != None:
+        #write results to training/testing data file (used to bootstrap training)
+        with open(outFile, "w") as file:
+            for line in textOutput:
+                file.write(line + "\n")

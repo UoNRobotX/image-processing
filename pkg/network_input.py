@@ -34,7 +34,7 @@ class CoarseBatchProducer:
         self.idx             = 0
         self.valuesGenerated = 0
         #read "dataFile"
-        if re.search(r"\.npz", dataFile):
+        if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
@@ -157,7 +157,7 @@ class DetailedBatchProducer:
         self.idx             = 0
         self.valuesGenerated = 0
         #read "dataFile"
-        if re.search(r"\.npz", dataFile):
+        if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]

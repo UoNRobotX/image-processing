@@ -204,7 +204,7 @@ class Window:
             )
             self.canvas.tag_lower(self.canvasImage) #move image to back
         else:
-            self.markFilterEscapeCallback(None)
+            self.fileIdx -= 1
     def markCoarseNextCallback(self, event, forward=True):
         #store mark info
         self.fileMarks[self.filenames[self.fileIdx]] = [
@@ -246,7 +246,7 @@ class Window:
             )
             self.canvas.tag_lower(self.canvasImage) #move image to back
         else:
-            self.markCoarseEscapeCallback(None)
+            self.fileIdx -= 1
     def markFilterPrevCallback(self, event):
         self.markFilterNextCallback(None, forward=False)
     def markCoarsePrevCallback(self, event):
@@ -428,7 +428,7 @@ class Window:
             )
             self.canvas.tag_lower(self.canvasImage) #move image to back
         else:
-            self.markDetailedEscapeCallback(None)
+            self.fileIdx -= 1
     def markDetailedPrevCallback(self, event):
         self.markDetailedNextCallback(None, False)
     def markDetailedEscapeCallback(self, event=None):
