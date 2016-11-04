@@ -41,14 +41,25 @@ def createCoarseNetwork(threshold):
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
             p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
         with tf.name_scope("input_reshape"):
-            x_flat = x
-            grayscale = True #RGB -> grayscale
-            if grayscale:
-                x_flat = tf.reduce_mean(x, 3)
+            rgb2gray = False
+            rgb2hsv = False
+            normalise = True
+            if rgb2gray:
+                #x2 = tf.reshape(tf.reduce_mean(x, 3), [-1, INPUT_HEIGHT, INPUT_WIDTH, 1])
+                x2 = tf.image.rgb_to_grayscale(x)
                 inputChannels = 1
-            x_flat = tf.reshape(x_flat, [-1, INPUT_HEIGHT*INPUT_WIDTH*inputChannels])
-            x_flat = tf.div(x_flat, tf.constant(255.0)) #normalize values
-            addSummaries(x, summaries, "input", "image")
+                if normalise:
+                    x2 = tf.div(x2, tf.constant(255.0))
+            elif rgb2hsv:
+                x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
+                x2 = tf.image.rgb_to_hsv(x2)
+            else:
+                if normalise:
+                    x2 = tf.div(x, tf.constant(255.0))
+                else:
+                    x2 = x
+            x_flat = tf.reshape(x2, [-1, INPUT_HEIGHT*INPUT_WIDTH*inputChannels])
+            addSummaries(x2, summaries, "input", "image")
         #hidden and output layers
         h = createLayer(
             x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 30, "hidden_layer", summaries
