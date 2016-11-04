@@ -1,6 +1,6 @@
-coarseModel/*
-detailedModel/*
-coarseSummaries
-detailedSummaries
+model_coarse/*
+model_detailed/*
+summaries_coarse
+summaries_detailed
 videos
 **/__pycache__

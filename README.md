@@ -37,7 +37,7 @@
 * Generate sample coarse network inputs: `./main.sh samples coarse`
 * View graph and training/testing statistics with tensorboard:
     * The coarse should have been trained or tested at least once.
-    * `tensorboard --logdir=coarseSummaries`
+    * `tensorboard --logdir=summaries_coarse`
     * Open a browser to localhost:6006
 
 ## Working with the whole network.
@@ -47,6 +47,6 @@
 * Generate sample detailed network inputs: `./main.sh samples detailed`
 * View graph and training/testing statistics with tensorboard.
     * The detailed network should have been trained or tested at least once.
-    * `tensorboard --logdir=detailedSummaries`
+    * `tensorboard --logdir=summaries_detailed`
     * Open a browser to localhost:6006
 

@@ -10,7 +10,7 @@ INPUT_WIDTH          = 32
 INPUT_CHANNELS       = 3
 BATCH_SIZE           = 50 #the number of inputs per training/testing step
 
-COARSE_SAVE_FILE     = "coarseModel/model.ckpt"   #save/load network values to/from here
-DETAILED_SAVE_FILE   = "detailedModel/model.ckpt"
-COARSE_SUMMARIES     = "coarseSummaries" #write summary data here, for use with tensorboard
-DETAILED_SUMMARIES   = "detailedSummaries"
+COARSE_SAVE_FILE     = "model_coarse/model.ckpt"   #save/load network values to/from here
+DETAILED_SAVE_FILE   = "model_detailed/model.ckpt"
+COARSE_SUMMARIES     = "summaries_coarse" #write summary data here, for use with tensorboard
+DETAILED_SUMMARIES   = "summaries_detailed"

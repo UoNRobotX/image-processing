@@ -4,7 +4,7 @@ set -e
 
 USAGE="Usage:
     $0 generate
-    $0 mark filter|coarse|detailed
+    $0 mark filter|coarse|detailed [keep]
     $0 view filter|coarse|detailed
     $0 train coarse|detailed
     $0 test coarse|detailed
@@ -13,7 +13,7 @@ USAGE="Usage:
 "
 
 CMD="$1"
-SUBCMD="$2"
+TYPE="$2"
 shift 2 || true
 
 case "$CMD" in
@@ -40,26 +40,30 @@ case "$CMD" in
         cd ..
     ;;
     "mark")
-        case "$SUBCMD" in
+        case "$TYPE" in
             "filter")
-                python3 mark_images.py filter -d images -l filterData.txt -o filterData.txt
+                python3 mark_images.py filter -d images -l data_filter.txt -o data_filter.txt
             ;;
             "coarse")
                 python3 mark_images.py coarse -d images -l data.txt -o data.txt
-                NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
-                NUM_LINES="$(cat data.txt | \
-                    awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++} END {print 0}")"
-                cat data.txt | awk "NR <  $NUM_LINES" > trainingDataCoarse.txt
-                cat data.txt | awk "NR >= $NUM_LINES" > testingDataCoarse.txt
-                rm data.txt
+                if [[ "$1" != "keep" ]]; then
+                    NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
+                    NUM_LINES="$(cat data.txt | \
+                        awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++} END {print 0}")"
+                    cat data.txt | awk "NR <  $NUM_LINES" > data_coarse_train.txt
+                    cat data.txt | awk "NR >= $NUM_LINES" > data_coarse_test.txt
+                    rm data.txt
+                fi
             ;;
             "detailed")
                 python3 mark_images.py detailed -d images -l data.txt -o data.txt
-                NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
-                NUM_LINES="$(cat data.txt | awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++}")"
-                cat data.txt | awk "NR <  $NUM_LINES" > trainingData.txt
-                cat data.txt | awk "NR >= $NUM_LINES" > testingData.txt
-                rm data.txt
+                if [[ "$1" != "keep" ]]; then
+                    NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
+                    NUM_LINES="$(cat data.txt | awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++}")"
+                    cat data.txt | awk "NR <  $NUM_LINES" > data_detailed_train.txt
+                    cat data.txt | awk "NR >= $NUM_LINES" > data_detailed_test.txt
+                    rm data.txt
+                fi
             ;;
             *)
                 echo "$USAGE"
@@ -68,15 +72,15 @@ case "$CMD" in
         esac
     ;;
     "view")
-        case "$SUBCMD" in
+        case "$TYPE" in
             "filter")
-                python3 mark_images.py filter -d images -l filterData.txt >/dev/null
+                python3 mark_images.py filter -d images -l data_filter.txt >/dev/null
             ;;
             "coarse")
-                python3 mark_images.py coarse -d images -l trainingDataCoarse.txt >/dev/null
+                python3 mark_images.py coarse -d images -l data_coarse_train.txt >/dev/null
             ;;
             "detailed")
-                python3 mark_images.py detailed -d images -l trainingData.txt >/dev/null
+                python3 mark_images.py detailed -d images -l data_detailed_train.txt >/dev/null
             ;;
             *)
                 echo "$USAGE"
@@ -85,23 +89,23 @@ case "$CMD" in
         esac
     ;;
     "train")
-        case "$SUBCMD" in
+        case "$TYPE" in
             "coarse")
-                if [[ trainingDataCoarse.txt -nt dataCoarse_train.npz ]]; then
-                    python3 use_network.py train trainingDataCoarse.txt testingDataCoarse.txt \
-                        filterData.txt -c -o dataCoarse -s 100 "$@"
+                if [[ data_coarse_train.txt -nt data_coarse_train.npz ]]; then
+                    python3 use_network.py train data_coarse_train.txt data_coarse_test.txt \
+                        data_filter.txt -c -o data_coarse -s 100 "$@"
                 else
-                    python3 use_network.py train dataCoarse_train.npz dataCoarse_test.npz \
-                        filterData.txt -c -s 100 "$@"
+                    python3 use_network.py train data_coarse_train.npz data_coarse_test.npz \
+                        data_filter.txt -c -s 100 "$@"
                 fi
             ;;
             "detailed")
-                if [[ trainingData.txt -nt dataDetailed_train.npz ]]; then
-                    python3 use_network.py train trainingData.txt testingData.txt \
-                        filterData.txt -o dataDetailed -s 100 "$@"
+                if [[ data_detailed_train.txt -nt data_detailed_train.npz ]]; then
+                    python3 use_network.py train data_detailed_train.txt data_detailed_test.txt \
+                        data_filter.txt -o data_detailed -s 100 "$@"
                 else
-                    python3 use_network.py train dataDetailed_train.npz dataDetailed_test.npz \
-                        filterData.txt -s 100 "$@"
+                    python3 use_network.py train data_detailed_train.npz data_detailed_test.npz \
+                        data_filter.txt -s 100 "$@"
                 fi
             ;;
             *)
@@ -111,23 +115,23 @@ case "$CMD" in
         esac
     ;;
     "test")
-        case "$SUBCMD" in
+        case "$TYPE" in
             "coarse")
-                if [[ testingDataCoarse.txt -nt dataCoarse_test.npz ]]; then
-                    python3 use_network.py test testingDataCoarse.txt \
-                        filterData.txt -c -o dataCoarse_test -s 100 "$@"
+                if [[ data_coarse_test.txt -nt data_coarse_test.npz ]]; then
+                    python3 use_network.py test data_coarse_test.txt \
+                        data_filter.txt -c -o data_coarse_test -s 100 "$@"
                 else
-                    python3 use_network.py test dataCoarse_test.npz \
-                        filterData.txt -c -s 100 "$@"
+                    python3 use_network.py test data_coarse_test.npz \
+                        data_filter.txt -c -s 100 "$@"
                 fi
             ;;
             "detailed")
-                if [[ testingData.txt -nt dataDetailed_test.npz ]]; then
-                    python3 use_network.py test testingData.txt \
-                        filterData.txt -o dataDetailed_test -s 100 "$@"
+                if [[ data_detailed_test.txt -nt data_detailed_test.npz ]]; then
+                    python3 use_network.py test data_detailed_test.txt \
+                        data_filter.txt -o data_detailed_test -s 100 "$@"
                 else
-                    python3 use_network.py test dataDetailed_test.npz \
-                        filterData.txt -s 100 "$@"
+                    python3 use_network.py test data_detailed_test.npz \
+                        data_filter.txt -s 100 "$@"
                 fi
             ;;
             *)
@@ -138,12 +142,12 @@ case "$CMD" in
     ;;
     "run")
         RANDOM_IMAGE="$(ls images | sort -R | head -n 1)"
-        case "$SUBCMD" in
+        case "$TYPE" in
             "coarse")
-                python3 use_network.py run images/"$RANDOM_IMAGE" filterData.txt -c -o out.jpg
+                python3 use_network.py run images/"$RANDOM_IMAGE" data_filter.txt -c -o out.jpg "$@"
             ;;
             "detailed")
-                python3 use_network.py run images/"$RANDOM_IMAGE" filterData.txt -o out.jpg
+                python3 use_network.py run images/"$RANDOM_IMAGE" data_filter.txt -o out.jpg "$@"
             ;;
             *)
                 echo "$USAGE"
@@ -152,20 +156,24 @@ case "$CMD" in
         esac
     ;;
     "samples")
-        case "$SUBCMD" in
+        case "$TYPE" in
             "coarse")
-                if [[ trainingDataCoarse.txt -nt dataCoarse_train.npz ]]; then
-                    python3 use_network.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg
+                if [[ data_coarse_train.txt -nt data_coarse_train.npz ]]; then
+                    python3 use_network.py samples data_coarse_train.txt data_filter.txt \
+                        -c -o out.jpg "$@"
                 else
-                    python3 use_network.py samples dataCoarse_train.npz filterData.txt -c -o out.jpg
+                    python3 use_network.py samples data_coarse_train.npz data_filter.txt \
+                        -c -o out.jpg "$@"
                 fi
                 
             ;;
             "detailed")
-                if [[ trainingData.txt -nt dataDetailed_train.npz ]]; then
-                    python3 use_network.py samples trainingData.txt filterData.txt -o out.jpg
+                if [[ data_detailed_train.txt -nt data_detailed_train.npz ]]; then
+                    python3 use_network.py samples data_detailed_train.txt data_filter.txt \
+                        -o out.jpg "$@"
                 else
-                    python3 use_network.py samples dataDetailed_train.npz filterData.txt -o out.jpg
+                    python3 use_network.py samples data_detailed_train.npz data_filter.txt \
+                        -o out.jpg "$@"
                 fi
             ;;
             *)
