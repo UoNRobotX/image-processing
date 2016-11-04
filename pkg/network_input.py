@@ -90,8 +90,21 @@ class CoarseBatchProducer:
                 #preprocess image
                 if False: #maximise image contrast
                     cellImg = ImageOps.autocontrast(cellImg)
+                if False: #equalize image histogram
+                    cellImg = ImageOps.equalize(cellImg)
                 if False: #blur image
-                    cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                    cellImg = cellImg.filter(ImageFilter.GaussianBlur(radius=2))
+                if False: #sharpen
+                    cellImg = cellImg.filter(ImageFilter.UnsharpMask(radius=2, percent=150, threshold=3))
+                if False: #min/max/median/mode filter
+                    cellImg.filter(ImageFilter.MinFilter(size=3))
+                    #cellImg.filter(ImageFilter.MaxFilter(size=3))
+                    #cellImg.filter(ImageFilter.MedianFilter(size=3))
+                    #cellImg.filter(ImageFilter.ModeFilter(size=3))
+                if False: #use kernel
+                    cellImg = cellImg.filter(ImageFilter.Kernel((3,3), (0, 0, 0, 0, 1, 0, 0, 0, 0)))
+                if False: #other
+                    cellImg = cellImg.filter(ImageFilter.FIND_EDGES)
                 cellImages = [cellImg]
                 if False: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
