@@ -7,14 +7,14 @@ from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProd
 
 NUM_SAMPLES = (20, 20)
 
-def genSamples(dataFile, filterFile, useCoarseOnly, outputImg, threshold):
+def genSamples(dataFile, filterFile, useCoarseOnly, outFile, threshold):
     startTime = time.time()
     #initialise
     cellFilter = getCellFilter(filterFile)
     if useCoarseOnly:
-        prod = CoarseBatchProducer(dataFile, cellFilter)
+        prod = CoarseBatchProducer(dataFile, cellFilter, None)
     else:
-        prod = DetailedBatchProducer(dataFile, cellFilter)
+        prod = DetailedBatchProducer(dataFile, cellFilter, None)
     image = Image.new("RGB", (INPUT_WIDTH*NUM_SAMPLES[0], INPUT_HEIGHT*NUM_SAMPLES[1]))
     draw = ImageDraw.Draw(image, "RGBA")
     #get samples
@@ -42,7 +42,7 @@ def genSamples(dataFile, filterFile, useCoarseOnly, outputImg, threshold):
                 numPositive += 1
     #output info
     print("Time taken: %.2f secs" % (time.time() - startTime))
-    print("Ratio of positive samples: %.2f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
+    print("Ratio of positive samples: %f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
     #save image
-    image.save(outputImg)
-    print("Output written to %s" % outputImg)
+    image.save(outFile)
+    print("Output written to %s" % outFile)

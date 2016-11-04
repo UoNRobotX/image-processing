@@ -87,12 +87,22 @@ case "$CMD" in
     "train")
         case "$SUBCMD" in
             "coarse")
-                python3 use_network.py train \
-                    trainingDataCoarse.txt testingDataCoarse.txt filterData.txt -c -s 100 "$@"
+                if [[ trainingDataCoarse.txt -nt dataCoarse_train.npz ]]; then
+                    python3 use_network.py train trainingDataCoarse.txt testingDataCoarse.txt \
+                        filterData.txt -c -o dataCoarse -s 100 "$@"
+                else
+                    python3 use_network.py train dataCoarse_train.npz dataCoarse_test.npz \
+                        filterData.txt -c -s 100 "$@"
+                fi
             ;;
             "detailed")
-                python3 use_network.py train \
-                    trainingData.txt testingData.txt filterData.txt -s 100 "$@"
+                if [[ trainingData.txt -nt dataDetailed_train.npz ]]; then
+                    python3 use_network.py train trainingData.txt testingData.txt \
+                        filterData.txt -o dataDetailed -s 100 "$@"
+                else
+                    python3 use_network.py train dataDetailed_train.npz dataDetailed_test.npz \
+                        filterData.txt -s 100 "$@"
+                fi
             ;;
             *)
                 echo "$USAGE"
@@ -103,10 +113,22 @@ case "$CMD" in
     "test")
         case "$SUBCMD" in
             "coarse")
-                python3 use_network.py test testingDataCoarse.txt filterData.txt -c -s 100 "$@"
+                if [[ testingDataCoarse.txt -nt dataCoarse_test.npz ]]; then
+                    python3 use_network.py test testingDataCoarse.txt \
+                        filterData.txt -c -o dataCoarse_test -s 100 "$@"
+                else
+                    python3 use_network.py test dataCoarse_test.npz \
+                        filterData.txt -c -s 100 "$@"
+                fi
             ;;
             "detailed")
-                python3 use_network.py test testingData.txt filterData.txt -s 100 "$@"
+                if [[ testingData.txt -nt dataDetailed_test.npz ]]; then
+                    python3 use_network.py test testingData.txt \
+                        filterData.txt -o dataDetailed_test -s 100 "$@"
+                else
+                    python3 use_network.py test dataDetailed_test.npz \
+                        filterData.txt -s 100 "$@"
+                fi
             ;;
             *)
                 echo "$USAGE"
@@ -132,10 +154,19 @@ case "$CMD" in
     "samples")
         case "$SUBCMD" in
             "coarse")
-                python3 use_network.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg
+                if [[ trainingDataCoarse.txt -nt dataCoarse_train.npz ]]; then
+                    python3 use_network.py samples trainingDataCoarse.txt filterData.txt -c -o out.jpg
+                else
+                    python3 use_network.py samples dataCoarse_train.npz filterData.txt -c -o out.jpg
+                fi
+                
             ;;
             "detailed")
-                python3 use_network.py samples trainingData.txt filterData.txt -o out.jpg
+                if [[ trainingData.txt -nt dataDetailed_train.npz ]]; then
+                    python3 use_network.py samples trainingData.txt filterData.txt -o out.jpg
+                else
+                    python3 use_network.py samples dataDetailed_train.npz filterData.txt -o out.jpg
+                fi
             ;;
             *)
                 echo '$USAGE'

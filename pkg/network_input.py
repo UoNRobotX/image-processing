@@ -1,4 +1,4 @@
-import math, random
+import math, random, re
 import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
@@ -25,7 +25,7 @@ class CoarseBatchProducer:
     """Produces input values for the coarse network"""
     VALUES_PER_IMAGE = 300
     #constructor
-    def __init__(self, dataFile, cellFilter):
+    def __init__(self, dataFile, cellFilter, outFile):
         self.cellFilter      = cellFilter
         self.filenames       = None #list of image files
         self.cells           = None #has the form [[[0,1,...],...],...], specifying cells in images
@@ -34,29 +34,37 @@ class CoarseBatchProducer:
         self.idx             = 0
         self.valuesGenerated = 0
         #read "dataFile"
-        self.filenames = []
-        cellsDict = dict()
-        with open(dataFile) as file:
-            filename = None
-            for line in file:
-                if line[0] != " ":
-                    filename = line.strip()
-                    self.filenames.append(filename)
-                    cellsDict[filename] = []
-                elif filename == None:
-                    raise Exception("Invalid data file")
-                else:
-                    cellsDict[filename].append([int(c) for c in line.strip()])
-        if len(self.filenames) == 0:
-            raise Exception("No filenames")
-        random.shuffle(self.filenames)
-        self.cells = [cellsDict[name] for name in self.filenames]
-        #allocate inputs and outputs
-        self.inputs = [None for name in self.filenames]
-        self.outputs = [None for name in self.filenames]
-        #load images
-        for i in range(1 if LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
-            self.loadImage(i)
+        if re.search(r"\.npz", dataFile):
+            data = np.load(dataFile)
+            self.inputs = data["arr_0"]
+            self.outputs = data["arr_1"]
+        else:
+            self.filenames = []
+            cellsDict = dict()
+            with open(dataFile) as file:
+                filename = None
+                for line in file:
+                    if line[0] != " ":
+                        filename = line.strip()
+                        self.filenames.append(filename)
+                        cellsDict[filename] = []
+                    elif filename == None:
+                        raise Exception("Invalid data file")
+                    else:
+                        cellsDict[filename].append([int(c) for c in line.strip()])
+            if len(self.filenames) == 0:
+                raise Exception("No filenames")
+            random.shuffle(self.filenames)
+            self.cells = [cellsDict[name] for name in self.filenames]
+            #allocate inputs and outputs
+            self.inputs = [None for name in self.filenames]
+            self.outputs = [None for name in self.filenames]
+            #load images
+            for i in range(len(self.filenames)):
+                self.loadImage(i)
+        #save data if requested
+        if outFile != None:
+            np.savez_compressed(outFile, self.inputs, self.outputs)
     #load next image
     def loadImage(self, fileIdx):
         #obtain PIL image
@@ -85,10 +93,10 @@ class CoarseBatchProducer:
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 cellImages = [cellImg]
-                if True: #add rotated images
+                if False: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
-                if True and containsWater: #add flip images
+                if False and containsWater: #add flip images
                     cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
                 if False: #add sheared images
                     shearFactor = random.random()*0.8 - 0.4
@@ -122,8 +130,6 @@ class CoarseBatchProducer:
         while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 self.idx = (self.idx + 1) % len(self.inputs)
-                if LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
-                    self.loadImage(self.idx)
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
             i = math.floor(random.random() * len(self.inputs[self.idx]))
@@ -142,7 +148,7 @@ class DetailedBatchProducer:
     """Produces input values for the detailed network"""
     VALUES_PER_IMAGE = 400
     #constructor
-    def __init__(self, dataFile, cellFilter):
+    def __init__(self, dataFile, cellFilter, outFile):
         self.cellFilter      = cellFilter
         self.filenames       = None #list of image files
         self.boxes           = []     #has the form [[x,y,x2,y2],...], specifying boxes in images
@@ -151,29 +157,37 @@ class DetailedBatchProducer:
         self.idx             = 0
         self.valuesGenerated = 0
         #read "dataFile"
-        self.filenames = []
-        boxesDict = dict()
-        with open(dataFile) as file:
-            filename = None
-            for line in file:
-                if line[0] != " ":
-                    filename = line.strip()
-                    self.filenames.append(filename)
-                    boxesDict[filename] = []
-                elif filename == None:
-                    raise Exception("Invalid data file")
-                else:
-                    boxesDict[filename].append([int(c) for c in line.strip().split(",")])
-        if len(self.filenames) == 0:
-            raise Exception("No filenames")
-        #random.shuffle(self.filenames)
-        self.boxes = [boxesDict[name] for name in self.filenames]
-        #allocate inputs and outputs
-        self.inputs = [None for name in self.filenames]
-        self.outputs = [None for name in self.filenames]
-        #load images
-        for i in range(1 if LOAD_IMAGES_ON_DEMAND else len(self.filenames)):
-            self.loadImage(i)
+        if re.search(r"\.npz", dataFile):
+            data = np.load(dataFile)
+            self.inputs = data["arr_0"]
+            self.outputs = data["arr_1"]
+        else:
+            self.filenames = []
+            boxesDict = dict()
+            with open(dataFile) as file:
+                filename = None
+                for line in file:
+                    if line[0] != " ":
+                        filename = line.strip()
+                        self.filenames.append(filename)
+                        boxesDict[filename] = []
+                    elif filename == None:
+                        raise Exception("Invalid data file")
+                    else:
+                        boxesDict[filename].append([int(c) for c in line.strip().split(",")])
+            if len(self.filenames) == 0:
+                raise Exception("No filenames")
+            #random.shuffle(self.filenames)
+            self.boxes = [boxesDict[name] for name in self.filenames]
+            #allocate inputs and outputs
+            self.inputs = [None for name in self.filenames]
+            self.outputs = [None for name in self.filenames]
+            #load images
+            for i in range(len(self.filenames)):
+                self.loadImage(i)
+        #save data if requested
+        if outFile != None:
+            np.savez_compressed(outFile, self.inputs, self.outputs)
     #load next image
     def loadImage(self, fileIdx):
         #obtain PIL image
@@ -185,7 +199,7 @@ class DetailedBatchProducer:
         #get inputs and outputs
         self.inputs[fileIdx] = []
         self.outputs[fileIdx] = []
-        stride = (INPUT_WIDTH//2, INPUT_HEIGHT//2)
+        stride = (INPUT_WIDTH//1, INPUT_HEIGHT//1)
         numHorizontalSteps = (IMG_SCALED_WIDTH  // stride[0]) - INPUT_WIDTH  // stride[0]
         numVerticalSteps   = (IMG_SCALED_HEIGHT // stride[1]) - INPUT_HEIGHT // stride[1]
         for i in range(numVerticalSteps):
@@ -237,12 +251,12 @@ class DetailedBatchProducer:
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 cellImages = [cellImg]
-                if True: #add rotated images
+                if False: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
-                if True and containsBuoy: #add flipped images
+                if False and containsBuoy: #add flipped images
                     cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
-                if True and containsBuoy: #add sheared images
+                if False and containsBuoy: #add sheared images
                     for maxShearFactor in [0.2, 0.2]:
                         shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
                         cellImages += [
@@ -276,8 +290,6 @@ class DetailedBatchProducer:
         while c < size:
             if self.valuesGenerated == self.VALUES_PER_IMAGE:
                 self.idx = (self.idx + 1) % len(self.inputs)
-                if LOAD_IMAGES_ON_DEMAND and self.inputs[self.idx] == None:
-                    self.loadImage(self.idx)
                 self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
             i = math.floor(random.random() * len(self.inputs[self.idx]))

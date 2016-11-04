@@ -1,4 +1,4 @@
-import os, time
+import os, re, time
 import tensorflow as tf
 
 from .constants import *
@@ -9,23 +9,23 @@ TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many trainin
 TRAINING_SAVE_PERIOD = 1000 #save every N steps
 TRAINING_RUN_PERIOD  = 50 #save runtime metadata every N steps
 
-def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, numSteps, threshold):
+def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, threshold):
     startTime = time.time()
     #initialise
     cellFilter = getCellFilter(filterFile)
     if useCoarseOnly: #train coarse network
         net = createCoarseNetwork(threshold)
         saveFile = COARSE_SAVE_FILE
-        prod = CoarseBatchProducer(dataFile, cellFilter)
+        prod = CoarseBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
+        testProd = CoarseBatchProducer(dataFile2, cellFilter, outFile and outFile + "_test")
         summaryWriter = tf.train.SummaryWriter(COARSE_SUMMARIES + "/train", net.graph)
-        testProd = CoarseBatchProducer(dataFile2, cellFilter)
         testSummaryWriter = tf.train.SummaryWriter(COARSE_SUMMARIES + "/train_test", net.graph)
     else: #train detailed network
         net = createDetailedNetwork()
         saveFile = DETAILED_SAVE_FILE
-        prod = DetailedBatchProducer(dataFile, cellFilter)
+        prod = DetailedBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
+        testProd = DetailedBatchProducer(dataFile2, cellFilter, outFile and outFile + "_test")
         summaryWriter = tf.train.SummaryWriter(DETAILED_SUMMARIES + "/train", net.graph)
-        testProd = DetailedBatchProducer(dataFile2, cellFilter)
         testSummaryWriter = tf.train.SummaryWriter(DETAILED_SUMMARIES + "/train_test", net.graph)
     #begin session
     with tf.Session(graph=net.graph) as sess:
@@ -63,7 +63,7 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, numSteps
                 testSummaryWriter.add_summary(summary, step)
                 rps = (outputs.argmax(1) == 0).sum() / len(outputs) #num positive samples / num samples
                 print(
-                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %.2f" %
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %f" %
                     (time.time() - startTime, step, acc, prec, rec, rps)
                 )
             #occasionally save variable values

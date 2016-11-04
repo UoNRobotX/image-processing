@@ -17,7 +17,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outputImg, threshold,
         filenames = [
             dataFile + "/" + name for
             name in os.listdir(dataFile) if
-            os.path.isfile(dataFile + "/" + name) and re.fullmatch(r".*\.jpg", name)
+            os.path.isfile(dataFile + "/" + name) and re.search(r"\.jpg$", name)
         ]
         filenames.sort()
         outputDir = outputImg or dataFile

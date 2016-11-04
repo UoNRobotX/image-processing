@@ -8,18 +8,18 @@ from .networks import createCoarseNetwork, createDetailedNetwork
 TESTING_LOG_PERIOD = 50
 TESTING_RUN_PERIOD = 50
 
-def test(dataFile, filterFile, useCoarseOnly, reinitialise, numSteps, threshold):
+def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, threshold):
     startTime = time.time()
     #initialise
     cellFilter = getCellFilter(filterFile)
     if useCoarseOnly: #test coarse network
         net = createCoarseNetwork(threshold)
-        prod = CoarseBatchProducer(dataFile, cellFilter)
+        prod = CoarseBatchProducer(dataFile, cellFilter, outFile)
         summaryWriter = tf.train.SummaryWriter(COARSE_SUMMARIES + "/test", net.graph)
         saveFile = COARSE_SAVE_FILE
     else: #test detailed network
         net = createDetailedNetwork()
-        prod = DetailedBatchProducer(dataFile, cellFilter)
+        prod = DetailedBatchProducer(dataFile, cellFilter, outFile)
         summaryWriter = tf.train.SummaryWriter(DETAILED_SUMMARIES + "/test", net.graph)
         saveFile = DETAILED_SAVE_FILE
     with tf.Session(graph=net.graph) as sess:
