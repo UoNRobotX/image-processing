@@ -42,7 +42,7 @@ def genSamples(dataFile, filterFile, useCoarseOnly, outFile, threshold):
                 numPositive += 1
     #output info
     print("Time taken: %.2f secs" % (time.time() - startTime))
-    print("Ratio of positive samples: %f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
+    print("Ratio of positive samples: %.2f" % (numPositive / (NUM_SAMPLES[0]*NUM_SAMPLES[1])))
     #save image
     image.save(outFile)
     print("Output written to %s" % outFile)

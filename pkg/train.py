@@ -63,7 +63,7 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
                 testSummaryWriter.add_summary(summary, step)
                 rps = (outputs.argmax(1) == 0).sum() / len(outputs) #num positive samples / num samples
                 print(
-                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %f" %
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %.2f" %
                     (time.time() - startTime, step, acc, prec, rec, rps)
                 )
             #occasionally save variable values

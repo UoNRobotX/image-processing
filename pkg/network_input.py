@@ -23,52 +23,45 @@ def getCellFilter(filterFile):
 
 class CoarseBatchProducer:
     """Produces input values for the coarse network"""
-    VALUES_PER_IMAGE = 300
     #constructor
     def __init__(self, dataFile, cellFilter, outFile):
-        self.cellFilter      = cellFilter
-        self.filenames       = None #list of image files
-        self.cells           = None #has the form [[[0,1,...],...],...], specifying cells in images
         self.inputs          = None
         self.outputs         = None
-        self.idx             = 0
-        self.valuesGenerated = 0
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
         else:
-            self.filenames = []
+            filenames = []
             cellsDict = dict()
             with open(dataFile) as file:
                 filename = None
                 for line in file:
                     if line[0] != " ":
                         filename = line.strip()
-                        self.filenames.append(filename)
+                        filenames.append(filename)
                         cellsDict[filename] = []
                     elif filename == None:
                         raise Exception("Invalid data file")
                     else:
                         cellsDict[filename].append([int(c) for c in line.strip()])
-            if len(self.filenames) == 0:
+            if len(filenames) == 0:
                 raise Exception("No filenames")
-            random.shuffle(self.filenames)
-            self.cells = [cellsDict[name] for name in self.filenames]
+            cells = [cellsDict[name] for name in filenames]
             #allocate inputs and outputs
-            self.inputs = [None for name in self.filenames]
-            self.outputs = [None for name in self.filenames]
+            self.inputs = [None for name in filenames]
+            self.outputs = [None for name in filenames]
             #load images
-            for i in range(len(self.filenames)):
-                self.loadImage(i)
+            for i in range(len(filenames)):
+                self.loadImage(i, filenames[i], cellFilter, cells)
         #save data if requested
         if outFile != None:
             np.savez_compressed(outFile, self.inputs, self.outputs)
     #load next image
-    def loadImage(self, fileIdx):
+    def loadImage(self, fileIdx, filename, cellFilter, cells):
         #obtain PIL image
-        image = Image.open(self.filenames[fileIdx])
+        image = Image.open(filename)
         image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
@@ -76,17 +69,17 @@ class CoarseBatchProducer:
         #get inputs and outputs
         self.inputs[fileIdx] = []
         self.outputs[fileIdx] = []
-        for row in range(len(self.cells[fileIdx])):
-            for col in range(len(self.cells[fileIdx][row])):
+        for row in range(len(cells[fileIdx])):
+            for col in range(len(cells[fileIdx][row])):
                 #use static filter
-                if self.cellFilter[row][col] == 1:
+                if cellFilter[row][col] == 1:
                     continue
                 #get cell image
                 cellImg = image.crop(
                     (col*INPUT_WIDTH, row*INPUT_HEIGHT, (col+1)*INPUT_WIDTH, (row+1)*INPUT_HEIGHT)
                 )
                 #determine whether the input should have a positive prediction
-                containsWater = self.cells[fileIdx][row][col] == 1
+                containsWater = cells[fileIdx][row][col] == 1
                 #preprocess image
                 if False: #maximise image contrast
                     cellImg = ImageOps.autocontrast(cellImg)
@@ -134,77 +127,67 @@ class CoarseBatchProducer:
                 self.inputs[fileIdx] += data
                 self.outputs[fileIdx] += [[1,0] if containsWater else [0,1]] * len(cellImages)
         if len(self.inputs[fileIdx]) == 0:
-            raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
+            raise Exception("No unfiltered cells for \"" + filename + "\"")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
         c = 0
         while c < size:
-            if self.valuesGenerated == self.VALUES_PER_IMAGE:
-                self.idx = (self.idx + 1) % len(self.inputs)
-                self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
-            i = math.floor(random.random() * len(self.inputs[self.idx]))
+            fileIdx = math.floor(random.random() * len(self.inputs))
+            idx = math.floor(random.random() * len(self.inputs[fileIdx]))
             ##bias samples towards positive examples
-            #if self.outputs[self.idx][i][0] == 0 and random.random() < 0.5:
+            #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
             #    continue
             #add input and output to batch
-            inputs.append(self.inputs[self.idx][i])
-            outputs.append(self.outputs[self.idx][i])
+            inputs.append(self.inputs[fileIdx][idx])
+            outputs.append(self.outputs[fileIdx][idx])
             #update
-            self.valuesGenerated += 1
             c += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
 
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
-    VALUES_PER_IMAGE = 400
     #constructor
     def __init__(self, dataFile, cellFilter, outFile):
-        self.cellFilter      = cellFilter
-        self.filenames       = None #list of image files
-        self.boxes           = []     #has the form [[x,y,x2,y2],...], specifying boxes in images
         self.inputs          = None
         self.outputs         = None
-        self.idx             = 0
-        self.valuesGenerated = 0
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
         else:
-            self.filenames = []
+            filenames = []
             boxesDict = dict()
             with open(dataFile) as file:
                 filename = None
                 for line in file:
                     if line[0] != " ":
                         filename = line.strip()
-                        self.filenames.append(filename)
+                        filenames.append(filename)
                         boxesDict[filename] = []
                     elif filename == None:
                         raise Exception("Invalid data file")
                     else:
                         boxesDict[filename].append([int(c) for c in line.strip().split(",")])
-            if len(self.filenames) == 0:
+            if len(filenames) == 0:
                 raise Exception("No filenames")
-            #random.shuffle(self.filenames)
-            self.boxes = [boxesDict[name] for name in self.filenames]
+            boxes = [boxesDict[name] for name in filenames]
             #allocate inputs and outputs
-            self.inputs = [None for name in self.filenames]
-            self.outputs = [None for name in self.filenames]
+            self.inputs = [None for name in filenames]
+            self.outputs = [None for name in filenames]
             #load images
-            for i in range(len(self.filenames)):
-                self.loadImage(i)
+            for i in range(len(filenames)):
+                self.loadImage(i, filenames[i], cellFilter, boxes)
         #save data if requested
         if outFile != None:
             np.savez_compressed(outFile, self.inputs, self.outputs)
     #load next image
-    def loadImage(self, fileIdx):
+    def loadImage(self, fileIdx, filename, cellFilter, boxes):
         #obtain PIL image
-        image = Image.open(self.filenames[fileIdx])
+        image = Image.open(filename)
         image = image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
@@ -232,7 +215,7 @@ class DetailedBatchProducer:
                 )
                 hasOverlappingFilteredCell = False
                 for (row, col) in intersectingCells:
-                    if self.cellFilter[row][col] == 1:
+                    if cellFilter[row][col] == 1:
                         hasOverlappingFilteredCell = True
                         break
                 if hasOverlappingFilteredCell:
@@ -248,7 +231,7 @@ class DetailedBatchProducer:
                 bottomRightX = (x+INPUT_WIDTH-1)*IMG_DOWNSCALE
                 bottomRightY = (y+INPUT_HEIGHT-1)*IMG_DOWNSCALE
                 containsBuoy = False
-                for box in self.boxes[self.idx]:
+                for box in boxes[fileIdx]:
                     f = 0.4 #impose overlap by least this factor, horizontally and vertically
                     boxWidth = box[2]-box[0]
                     boxHeight = box[3]-box[1]
@@ -294,25 +277,22 @@ class DetailedBatchProducer:
                 #get output
                 self.outputs[fileIdx] += [[1,0] if containsBuoy else [0,1]] * len(cellImages)
         if len(self.inputs[fileIdx]) == 0:
-            raise Exception("No unfiltered cells for \"" + self.filenames[fileIdx] + "\"")
+            raise Exception("No unfiltered cells for \"" + filename + "\"")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
         c = 0
         while c < size:
-            if self.valuesGenerated == self.VALUES_PER_IMAGE:
-                self.idx = (self.idx + 1) % len(self.inputs)
-                self.valuesGenerated = 0
             #randomly select a non-filtered grid cell
-            i = math.floor(random.random() * len(self.inputs[self.idx]))
+            fileIdx = math.floor(random.random() * len(self.inputs))
+            idx = math.floor(random.random() * len(self.inputs[fileIdx]))
             ##bias samples towards positive examples
-            #if self.outputs[self.idx][i][0] == 0 and random.random() < 0.5:
+            #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
             #    continue
             #add input and output to batch
-            inputs.append(self.inputs[self.idx][i])
-            outputs.append(self.outputs[self.idx][i])
+            inputs.append(self.inputs[fileIdx][idx])
+            outputs.append(self.outputs[fileIdx][idx])
             #update
-            self.valuesGenerated += 1
             c += 1
         return np.array(inputs), np.array(outputs).astype(np.float32)
