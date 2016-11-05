@@ -1,11 +1,10 @@
 import os, time, re
 import numpy as np
 from PIL import Image, ImageDraw
-import tensorflow as tf
 
 from .constants import *
 from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
-from .networks import createCoarseNetwork, createDetailedNetwork
+from .network import createCoarseNetwork, createDetailedNetwork, runNetwork
 
 def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, thresholdGiven):
     startTime = time.time()
@@ -44,57 +43,36 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
         image = Image.open(filenames[fileIdx])
         image_scaled = image.resize((IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT), resample=Image.LANCZOS)
         #obtain numpy array
-        array = np.array(list(image_scaled.getdata())).astype(np.float32)
-        array = array.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
-        array = np.array([array])
-        #variable for storing results
-        p = [
+        imageData = np.array(list(image_scaled.getdata())).astype(np.float32)
+        imageData = imageData.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+        imageData = np.array([imageData])
+        #used for storing results
+        results = [
             [0 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH)]
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
         ]
+        staticFilteredFlag = -2
+        coarseFilteredFlag = -1
         #filter with static filter
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
             for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                 if cellFilter != None and cellFilter[i][j] == 1:
-                    p[i][j] = -2
+                    results[i][j] = staticFilteredFlag
         #filter with coarse network
-        with tf.Session(graph=coarseNet.graph) as sess:
-            #reinitialise or load values
-            if reinitialise or not os.path.exists(COARSE_SAVE_FILE):
-                sess.run(tf.initialize_all_variables())
-            else:
-                tf.train.Saver(tf.all_variables()).restore(sess, COARSE_SAVE_FILE)
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    if p[i][j] == 0:
-                        d = array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
-                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
-                        out = coarseNet.y.eval(feed_dict={coarseNet.x: d, coarseNet.p_dropout: 1.0})
-                        if useCoarseOnly:
-                            p[i][j] = out[0]
-                        elif out[0] > threshold:
-                            p[i][j] = -1
+        runNetwork(coarseNet, imageData, results, reinitialise, COARSE_SAVE_FILE)
+        #use detailed network if requested
         if not useCoarseOnly:
-            #use detailed network
-            with tf.Session(graph=detailedNet.graph) as sess:
-                #reinitialise or load values
-                if reinitialise or not os.path.exists(DETAILED_SAVE_FILE):
-                    sess.run(tf.initialize_all_variables())
-                else:
-                    tf.train.Saver(tf.all_variables()).restore(sess, DETAILED_SAVE_FILE)
-                for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                    for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                        if p[i][j] == 0:
-                            d = array[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
-                                INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :]
-                            out = detailedNet.y.eval(feed_dict={
-                                detailedNet.x: d, detailedNet.p_dropout: 1.0
-                            })
-                            p[i][j] = out[0][0]
+            #mark coarse filtered cells
+            for i in range(len(results)):
+                for j in range(len(results[i])):
+                    if results[i][j] > threshold:
+                        results[i][j] = coarseFilteredFlag
+            #run detailed network
+            runNetwork(detailedNet, imageData, results, reinitialise, DETAILED_SAVE_FILE)
         #output results
         if textOutput != None:
             textOutput.append(filenames[fileIdx])
-            for row in p:
+            for row in results:
                 line = ["1" if cell > threshold else "0" for cell in row]
                 textOutput.append(" " + "".join(line))
             print("%7.2f secs - processed %s " % \
@@ -113,13 +91,13 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                     ]
                     #draw a grid cell outline
                     draw.rectangle(rect, outline=(0,0,0,255))
-                    if p[i][j] >= 0:
+                    if results[i][j] >= 0:
                         if not thresholdGiven:
-                            rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-p[i][j]))
+                            rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-results[i][j]))
                             draw.rectangle(rect, fill=(0,255,0,96))
-                        elif p[i][j] > threshold:
+                        elif results[i][j] > threshold:
                             draw.rectangle(rect, fill=(0,255,0,96))
-                    elif p[i][j] == -1:
+                    elif results[i][j] == -1:
                         draw.rectangle(rect, fill=(196,128,0,96))
                     else:
                         draw.rectangle(rect, fill=(196,0,0,96))

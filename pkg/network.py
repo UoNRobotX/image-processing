@@ -1,8 +1,9 @@
+import os, time
 import tensorflow as tf
 
 from .constants import *
 
-class NetworkNodes:
+class Network:
     """ Holds nodes of a tensorflow network """
     def __init__(self, graph, x, y_, p_dropout, y, accuracy, precision, recall, train, summaries):
         self.graph = graph
@@ -15,6 +16,125 @@ class NetworkNodes:
         self.recall = recall
         self.train = train
         self.summaries = tf.merge_summary(summaries)
+
+def runNetwork(net, imageData, results, reinitialise, saveFile):
+    """ Run the network on cells of an image, inserting them into 'results'.
+        Only runs on cells where results[i][j] is non-negative.
+    """
+    with tf.Session(graph=net.graph) as sess:
+        #reinitialise or load values
+        if reinitialise or not os.path.exists(saveFile):
+            sess.run(tf.initialize_all_variables())
+        else:
+            tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
+        #run on each cell
+        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
+            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+                if results[i][j] >= 0:
+                    out = net.y.eval(feed_dict={
+                        net.x: imageData[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
+                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
+                        net.p_dropout: 1.0
+                    })
+                    results[i][j] = out[0][0]
+
+def testNetwork(net, numSteps, prod, summaryDir, reinitialise, saveFile):
+    TESTING_LOG_PERIOD = 50
+    TESTING_RUN_PERIOD = 50
+    startTime = time.time()
+    summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
+    metrics = [] #[[accuracy, precision, recall], ...]
+    with tf.Session(graph=net.graph) as sess:
+        #reinitialise or load values
+        if reinitialise or not os.path.exists(saveFile):
+            sess.run(tf.initialize_all_variables())
+        else:
+            tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
+        #do testing
+        for step in range(numSteps):
+            inputs, outputs = prod.getBatch(BATCH_SIZE)
+            feedDict = {net.x: inputs, net.y_: outputs, net.p_dropout: 1.0}
+            if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
+                run_metadata = tf.RunMetadata()
+                summary, acc, prec, rec = sess.run(
+                    [net.summaries, net.accuracy, net.precision, net.recall],
+                    feed_dict=feedDict,
+                    options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                    run_metadata=run_metadata
+                )
+                summaryWriter.add_run_metadata(run_metadata, "step%03d" % step)
+            else:
+                summary, acc, prec, rec = sess.run(
+                    [net.summaries, net.accuracy, net.precision, net.recall],
+                    feed_dict=feedDict
+                )
+            metrics.append([acc, prec, rec])
+            summaryWriter.add_summary(summary, step)
+            if step % TESTING_LOG_PERIOD == 0:
+                print(
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f" %
+                    (time.time()-startTime, step, acc, prec, rec)
+                )
+    accs  = [m[0] for m in metrics]
+    precs = [m[1] for m in metrics]
+    recs  = [m[2] for m in metrics]
+    print(
+        "Averages: accuracy %.2f, precision %.2f, recall %.2f" %
+        (sum(accs)/len(accs), sum(precs)/len(precs), sum(recs)/len(recs))
+    )
+    summaryWriter.close()
+
+def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, reinitialise, saveFile):
+    TRAINING_LOG_PERIOD  = 50 #informative lines are printed after this many training steps
+    TRAINING_SAVE_PERIOD = 1000 #save every N steps
+    TRAINING_RUN_PERIOD  = 50 #save runtime metadata every N steps
+    startTime = time.time()
+    summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
+    testSummaryWriter = tf.train.SummaryWriter(testSummaryDir, net.graph)
+    with tf.Session(graph=net.graph) as sess:
+        saver = tf.train.Saver(tf.all_variables())
+        #reinitialise or load values
+        if reinitialise or not os.path.exists(saveFile):
+            sess.run(tf.initialize_all_variables())
+        else:
+            saver.restore(sess, saveFile)
+        #do training
+        for step in range(numSteps):
+            inputs, outputs = prod.getBatch(BATCH_SIZE)
+            if step > 0 and step % TRAINING_RUN_PERIOD == 0: #occasionally save runtime metadata
+                run_metadata = tf.RunMetadata()
+                summary, _ = sess.run(
+                    [net.summaries, net.train],
+                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 0.5},
+                    options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                    run_metadata=run_metadata
+                )
+                summaryWriter.add_run_metadata(run_metadata, "step%03d" % step)
+            else:
+                summary, _ = sess.run(
+                    [net.summaries, net.train],
+                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 0.5}
+                )
+            summaryWriter.add_summary(summary, step)
+            #occasionally print step and accuracy
+            if step % TRAINING_LOG_PERIOD == 0 or step == numSteps-1:
+                inputs, outputs = testProd.getBatch(BATCH_SIZE)
+                acc, prec, rec = sess.run(
+                    [net.accuracy, net.precision, net.recall],
+                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 1.0}
+                )
+                testSummaryWriter.add_summary(summary, step)
+                rps = (outputs.argmax(1) == 0).sum() / len(outputs)
+                    #num positive samples / num samples
+                print(
+                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %.2f" %
+                    (time.time() - startTime, step, acc, prec, rec, rps)
+                )
+            #occasionally save variable values
+            if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
+                saver.save(sess, saveFile)
+        saver.save(sess, saveFile)
+        summaryWriter.close()
 
 def createCoarseNetwork(threshold):
     #helper functions
@@ -104,7 +224,7 @@ def createCoarseNetwork(threshold):
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
+    return Network(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def createDetailedNetwork():
     #helper functions
@@ -217,7 +337,7 @@ def createDetailedNetwork():
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
-    return NetworkNodes(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
+    return Network(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def addSummaries(node, summaries, name, method):
     """
