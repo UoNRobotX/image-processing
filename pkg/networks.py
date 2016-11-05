@@ -33,19 +33,18 @@ def createCoarseNetwork(threshold):
     summaries = []
     graph = tf.Graph()
     with graph.as_default():
-        inputChannels = INPUT_CHANNELS
+        inputChannels = IMG_CHANNELS
         #input nodes
         with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
             x = tf.placeholder(tf.float32, \
-                [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name="x_input")
+                [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
             p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
-        with tf.name_scope("input_reshape"):
+        with tf.name_scope("input_process"):
             rgb2gray = False
             rgb2hsv = False
             normalise = True
             if rgb2gray:
-                #x2 = tf.reshape(tf.reduce_mean(x, 3), [-1, INPUT_HEIGHT, INPUT_WIDTH, 1])
                 x2 = tf.image.rgb_to_grayscale(x)
                 inputChannels = 1
                 if normalise:
@@ -126,17 +125,35 @@ def createDetailedNetwork():
     summaries = []
     graph = tf.Graph()
     with graph.as_default():
+        inputChannels = IMG_CHANNELS
         #input nodes
         with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
-            x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, INPUT_CHANNELS], name="x_input")
+            x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
             p_dropout = tf.placeholder(tf.float32, name="p_dropout")
-        addSummaries(x, summaries, "input", "image")
+        with tf.name_scope("input_process"):
+            rgb2gray = False
+            rgb2hsv = False
+            normalise = True
+            if rgb2gray:
+                x2 = tf.image.rgb_to_grayscale(x)
+                inputChannels = 1
+                if normalise:
+                    x2 = tf.div(x2, tf.constant(255.0))
+            elif rgb2hsv:
+                x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
+                x2 = tf.image.rgb_to_hsv(x2)
+            else:
+                if normalise:
+                    x2 = tf.div(x, tf.constant(255.0))
+                else:
+                    x2 = x
+            addSummaries(x2, summaries, "input", "image")
         #first convolutional layer
         with tf.name_scope("conv_layer1"):
             w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
             b1 = createBiases([32])
-            c1 = createConv(x, w1, b1)
+            c1 = createConv(x2, w1, b1)
             p1 = createPool(c1)
             #addSummaries(w1, summaries, "conv_layer1", "mean_stddev_hist")
             #addSummaries(b1, summaries, "conv_layer1", "mean_stddev_hist")

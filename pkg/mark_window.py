@@ -38,6 +38,7 @@ class Window:
         self.window.title(self.filenames[self.fileIdx])
         #obtain image, and downscale it
         self.image = Image.open(self.filenames[self.fileIdx])
+        self.checkImage(self.image, self.filenames[self.fileIdx])
         self.image = self.image.resize(
             (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
             resample=Image.LANCZOS
@@ -192,6 +193,7 @@ class Window:
             #load new image
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(self.filenames[self.fileIdx])
+            self.checkImage(self.image, self.filenames[self.fileIdx])
             self.image = self.image.resize(
                 (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
@@ -234,6 +236,7 @@ class Window:
             #load new image
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(filename)
+            self.checkImage(self.image, self.filenames[self.fileIdx])
             self.image = self.image.resize(
                 (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
@@ -416,6 +419,7 @@ class Window:
                     )
             #load new image
             self.image = Image.open(self.filenames[self.fileIdx])
+            self.checkImage(self.image, self.filenames[self.fileIdx])
             self.image = self.image.resize(
                 (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
                 resample=Image.LANCZOS
@@ -474,4 +478,11 @@ class Window:
                 fill="green",
                 stipple="gray50"
             )
+    def checkImage(self, image, filename):
+        if image.size[0] != IMG_WIDTH or image.size[1] != IMG_HEIGHT:
+            raise Exception("Unexpected size for image \"" + filename + "\"")
+        if IMG_CHANNELS != 3:
+            raise Exception("An IMG_CHANNELS other than 3 has not been implemented")
+        if image.mode != "RGB":
+            raise Exception("Unexpected mode for image \"" + filename + "\"")
 

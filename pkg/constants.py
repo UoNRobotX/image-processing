@@ -7,7 +7,6 @@ IMG_SCALED_WIDTH     = IMG_WIDTH  // IMG_DOWNSCALE
 
 INPUT_HEIGHT         = 32
 INPUT_WIDTH          = 32
-INPUT_CHANNELS       = 3
 BATCH_SIZE           = 50 #the number of inputs per training/testing step
 
 COARSE_SAVE_FILE     = "model_coarse/model.ckpt"   #save/load network values to/from here
