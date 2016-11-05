@@ -28,6 +28,7 @@ def createCoarseNetwork(threshold):
     COST_FUNC = "squared_error" or "logistic_loss"
     OPTIMIZER = "adam" or "gradient_descent" or "adadelta" or \
         "adagrad" or "momentum" or "ftrl" or "rmsprop"
+    DROPOUT = False
     #helper functions
     def createLayer(input, inSize, outSize, layerName, summaries):
         with tf.name_scope(layerName):
@@ -37,7 +38,10 @@ def createCoarseNetwork(threshold):
             with tf.name_scope("biases"):
                 b = tf.Variable(tf.constant(BIASES_INIT, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
-            return ACTIVATION_FUNC(tf.matmul(input, w) + b, name="out")
+            wb = tf.matmul(input, w) + b
+            if DROPOUT:
+                wb = tf.nn.dropout(wb, p_dropout)
+            return ACTIVATION_FUNC(wb, name="out")
     #create nodes
     summaries = []
     graph = tf.Graph()
@@ -279,13 +283,14 @@ def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, rein
         else:
             saver.restore(sess, saveFile)
         #do training
+        p_dropout = 0.5 #only used if enabled in 'createCoarseNetwork'
         for step in range(numSteps):
             inputs, outputs = prod.getBatch(BATCH_SIZE)
             if step > 0 and step % TRAINING_RUN_PERIOD == 0: #occasionally save runtime metadata
                 run_metadata = tf.RunMetadata()
                 summary, _ = sess.run(
                     [net.summaries, net.train],
-                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 0.5},
+                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: p_dropout},
                     options=tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
                     run_metadata=run_metadata
                 )
@@ -293,7 +298,7 @@ def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, rein
             else:
                 summary, _ = sess.run(
                     [net.summaries, net.train],
-                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 0.5}
+                    feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: p_dropout}
                 )
             summaryWriter.add_summary(summary, step)
             #occasionally print step and accuracy
