@@ -1,4 +1,4 @@
-import os, time
+import math, os, time
 import tensorflow as tf
 
 from .constants import *
@@ -20,12 +20,12 @@ class Network:
 def createCoarseNetwork(threshold):
     WEIGHTS_INIT = tf.truncated_normal or tf.random_normal or tf.random_uniform
     BIASES_INIT = 1.0
-    ACTIVATION_FUNC = tf.nn.sigmoid or tf.nn.tanh or tf.nn.relu
+    ACTIVATION_FUNC = tf.nn.sigmoid or tf.nn.tanh or tf.nn.relu or prelu
     PREPROCESS_GRAY = False
     PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
     HIDDEN_LAYERS = [30]
-    COST_FUNC = "squared_error"
+    COST_FUNC = "squared_error" or "logistic_loss"
     OPTIMIZER = "adam" or "gradient_descent" or "adadelta" or \
         "adagrad" or "momentum" or "ftrl" or "rmsprop"
     #helper functions
@@ -37,7 +37,7 @@ def createCoarseNetwork(threshold):
             with tf.name_scope("biases"):
                 b = tf.Variable(tf.constant(BIASES_INIT, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
-            return ACTIVATION_FUNC(tf.matmul(input, w) + b, "out")
+            return ACTIVATION_FUNC(tf.matmul(input, w) + b, name="out")
     #create nodes
     summaries = []
     graph = tf.Graph()
@@ -80,6 +80,8 @@ def createCoarseNetwork(threshold):
         with tf.name_scope("cost"):
             if COST_FUNC == "squared_error":
                 cost = tf.square(y2 - y)
+            elif COST_FUNC == "logistic_loss":
+                cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y2))
             else:
                 raise Exception("Unrecognised cost function")
             addSummaries(cost, summaries, "cost", "mean")
@@ -380,3 +382,7 @@ def runNetwork(net, imageData, results, reinitialise, saveFile):
                         net.p_dropout: 1.0
                     })
                     results[i][j] = out[0][0]
+
+def prelu(x, name=None):
+    alphas = tf.Variable(tf.constant(0.0, shape=[x.get_shape()[-1]]))
+    return tf.add(tf.nn.relu(x), alphas * (x - abs(x)) * 0.5)
