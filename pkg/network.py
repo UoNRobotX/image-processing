@@ -18,18 +18,26 @@ class Network:
         self.summaries = tf.merge_summary(summaries)
 
 def createCoarseNetwork(threshold):
+    WEIGHTS_INIT = tf.truncated_normal or tf.random_normal or tf.random_uniform
+    BIASES_INIT = 1.0
+    ACTIVATION_FUNC = tf.nn.sigmoid or tf.nn.tanh or tf.nn.relu
+    PREPROCESS_GRAY = False
+    PREPROCESS_HSV = False
+    PREPROCESS_NORMALIZE = True
+    HIDDEN_LAYERS = [30]
+    COST_FUNC = "squared_error"
+    OPTIMIZER = "adam" or "gradient_descent" or "adadelta" or \
+        "adagrad" or "momentum" or "ftrl" or "rmsprop"
     #helper functions
     def createLayer(input, inSize, outSize, layerName, summaries):
         with tf.name_scope(layerName):
             with tf.name_scope("weights"):
-                w = tf.Variable(
-                    tf.truncated_normal([inSize, outSize], stddev=0.5)
-                )
+                w = tf.Variable(WEIGHTS_INIT([inSize, outSize]))
                 addSummaries(w, summaries, layerName + "/weights", "mean_stddev_hist")
             with tf.name_scope("biases"):
-                b = tf.Variable(tf.constant(0.1, shape=[outSize]))
+                b = tf.Variable(tf.constant(BIASES_INIT, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
-            return tf.nn.sigmoid(tf.matmul(input, w) + b, "out")
+            return ACTIVATION_FUNC(tf.matmul(input, w) + b, "out")
     #create nodes
     summaries = []
     graph = tf.Graph()
@@ -40,50 +48,67 @@ def createCoarseNetwork(threshold):
             x = tf.placeholder(tf.float32, \
                 [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
+            y2 = tf.slice(y_, [0, 0], [-1, 1])
             p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
-        with tf.name_scope("input_process"):
-            rgb2gray = False
-            rgb2hsv = False
-            normalise = True
-            if rgb2gray:
+        with tf.name_scope("process_input"):
+            if PREPROCESS_GRAY:
                 x2 = tf.image.rgb_to_grayscale(x)
                 inputChannels = 1
-                if normalise:
+                if PREPROCESS_NORMALIZE:
                     x2 = tf.div(x2, tf.constant(255.0))
-            elif rgb2hsv:
+            elif PREPROCESS_HSV:
                 x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
                 x2 = tf.image.rgb_to_hsv(x2)
             else:
-                if normalise:
+                if PREPROCESS_NORMALIZE:
                     x2 = tf.div(x, tf.constant(255.0))
                 else:
                     x2 = x
             x_flat = tf.reshape(x2, [-1, INPUT_HEIGHT*INPUT_WIDTH*inputChannels])
             addSummaries(x2, summaries, "input", "image")
         #hidden and output layers
-        h = createLayer(
-            x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 30, "hidden_layer", summaries
-        )
+        layerSizes = [INPUT_HEIGHT*INPUT_WIDTH*inputChannels] + HIDDEN_LAYERS
+        layer = x_flat
+        for i in range(1,len(layerSizes)):
+            layer = createLayer(
+                layer, layerSizes[i-1], layerSizes[i], "hidden_layer" + str(i), summaries
+            )
         y = createLayer(
-            h, 30, 1, "output_layer", summaries
+            layer, layerSizes[-1], 1, "output_layer", summaries
         )
-        #y = createLayer(
-        #    x_flat, INPUT_HEIGHT*INPUT_WIDTH*inputChannels, 1, "output_layer", summaries
-        #)
-        y2 = tf.slice(y_, [0, 0], [-1, 1])
         #cost
         with tf.name_scope("cost"):
-            cost = tf.square(y2 - y)
+            if COST_FUNC == "squared_error":
+                cost = tf.square(y2 - y)
+            else:
+                raise Exception("Unrecognised cost function")
             addSummaries(cost, summaries, "cost", "mean")
         #optimizer
         with tf.name_scope("train"):
-            train = tf.train.AdamOptimizer().minimize(cost)
-        #accuracy
-        with tf.name_scope("accuracy"):
+            if OPTIMIZER == "adam":
+                train = tf.train.AdamOptimizer().minimize(cost)
+            elif OPTIMIZER == "gradient_descent":
+                train = tf.train.GradientDescentOptimizer(0.01)
+            elif OPTIMIZER == "adadelta":
+                train = tf.train.AdadeltaOptimizer()
+            elif OPTIMIZER == "adagrad":
+                train = tf.train.AdagradOptimizer(0.01)
+            elif OPTIMIZER == "momentum":
+                train = tf.train.MomentumOptimizer(0.01)
+            elif OPTIMIZER == "ftrl":
+                train = tf.train.FtrlOptimizer(0.01)
+            elif OPTIMIZER == "rmsprop":
+                train = tf.train.RMSPropOptimizer(0.01)
+            else:
+                raise Exception("Unrecognised optimizer")
+        #metrics
+        with tf.name_scope("metrics"):
             y_pred = tf.greater(y, tf.constant(threshold))
             y2_pred = tf.greater(y2, tf.constant(0.5))
             correctness = tf.equal(y_pred, y2_pred)
+            #accuracy
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            addSummaries(accuracy, summaries, "accuracy", "mean")
             #precision and recall
             truePos = tf.reduce_sum(tf.cast(
                 tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
@@ -101,7 +126,6 @@ def createCoarseNetwork(threshold):
                 lambda: tf.constant(0.0),
                 lambda: truePos / actualPos
             )
-            addSummaries(accuracy, summaries, "accuracy", "mean")
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
@@ -132,7 +156,7 @@ def createDetailedNetwork():
             x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
             p_dropout = tf.placeholder(tf.float32, name="p_dropout")
-        with tf.name_scope("input_process"):
+        with tf.name_scope("process_input"):
             rgb2gray = False
             rgb2hsv = False
             normalise = True
@@ -173,7 +197,7 @@ def createDetailedNetwork():
             p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
             h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
             #addSummaries(w3, summaries, "dense_layer", "mean_stddev_hist")
-            #addSummaries(b3, summaries, /dense_layer", "mean_stddev_hist")
+            #addSummaries(b3, summaries, "dense_layer", "mean_stddev_hist")
         #dropout
         h1_dropout = tf.nn.dropout(h1, p_dropout)
         #readout layer
@@ -191,12 +215,14 @@ def createDetailedNetwork():
         #optimizer
         with tf.name_scope("train"):
             train = tf.train.AdamOptimizer().minimize(cost)
-        #accuracy
-        with tf.name_scope("accuracy"):
+        #metrics
+        with tf.name_scope("metrics"):
             y_pred  = tf.greater(tf.slice(y,  [0, 0], [-1, 1]), tf.slice(y,  [0, 1], [-1, 1]))
             y2_pred = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.slice(y_, [0, 1], [-1, 1]))
             correctness = tf.equal(y_pred, y2_pred)
+            #accuracy
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+            addSummaries(accuracy, summaries, "accuracy", "mean")
             #precision and recall
             truePos = tf.reduce_sum(tf.cast(
                 tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
@@ -214,7 +240,6 @@ def createDetailedNetwork():
                 lambda: tf.constant(0.0),
                 lambda: truePos / actualPos
             )
-            addSummaries(accuracy, summaries, "accuracy", "mean")
             addSummaries(prec, summaries, "precision", "mean")
             addSummaries(rec, summaries, "recall", "mean")
     #return output nodes and trainer
