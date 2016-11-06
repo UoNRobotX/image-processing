@@ -72,10 +72,10 @@ case "$CMD" in
                 python3 mark_images.py filter -d images -l data_filter.txt >/dev/null
             ;;
             "coarse")
-                python3 mark_images.py coarse -d images -l data_coarse_train.txt >/dev/null
+                python3 mark_images.py coarse -d images -l <(cat data_coarse_*) >/dev/null
             ;;
             "detailed")
-                python3 mark_images.py detailed -d images -l data_detailed_train.txt >/dev/null
+                python3 mark_images.py detailed -d images -l <(cat data_detailed_*) >/dev/null
             ;;
             *)
                 echo "$USAGE"
