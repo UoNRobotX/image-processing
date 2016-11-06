@@ -34,21 +34,20 @@ class CoarseBatchProducer:
             self.outputs = data["arr_1"]
         else:
             filenames = []
-            cellsDict = dict()
+            cells = []
             with open(dataFile) as file:
                 filename = None
                 for line in file:
                     if line[0] != " ":
                         filename = line.strip()
                         filenames.append(filename)
-                        cellsDict[filename] = []
+                        cells.append([])
                     elif filename == None:
                         raise Exception("Invalid data file")
                     else:
-                        cellsDict[filename].append([int(c) for c in line.strip()])
+                        cells[-1].append([int(c) for c in line.strip()])
             if len(filenames) == 0:
                 raise Exception("No filenames")
-            cells = [cellsDict[name] for name in filenames]
             #allocate inputs and outputs
             self.inputs = [None for name in filenames]
             self.outputs = [None for name in filenames]
@@ -160,21 +159,20 @@ class DetailedBatchProducer:
             self.outputs = data["arr_1"]
         else:
             filenames = []
-            boxesDict = dict()
+            boxes = []
             with open(dataFile) as file:
                 filename = None
                 for line in file:
                     if line[0] != " ":
                         filename = line.strip()
                         filenames.append(filename)
-                        boxesDict[filename] = []
+                        boxes.append([])
                     elif filename == None:
                         raise Exception("Invalid data file")
                     else:
-                        boxesDict[filename].append([int(c) for c in line.strip().split(",")])
+                        boxes[-1].append([int(c) for c in line.strip().split(",")])
             if len(filenames) == 0:
                 raise Exception("No filenames")
-            boxes = [boxesDict[name] for name in filenames]
             #allocate inputs and outputs
             self.inputs = [None for name in filenames]
             self.outputs = [None for name in filenames]
