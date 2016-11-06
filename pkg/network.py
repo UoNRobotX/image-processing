@@ -284,6 +284,7 @@ def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, rein
             saver.restore(sess, saveFile)
         #do training
         p_dropout = 0.5 #only used if enabled in 'createCoarseNetwork'
+        prevAcc = 0.0
         for step in range(numSteps):
             inputs, outputs = prod.getBatch(BATCH_SIZE)
             if step > 0 and step % TRAINING_RUN_PERIOD == 0: #occasionally save runtime metadata
@@ -312,9 +313,10 @@ def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, rein
                 rps = (outputs.argmax(1) == 0).sum() / len(outputs)
                     #num positive samples / num samples
                 print(
-                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f, rps %.2f" %
-                    (time.time() - startTime, step, acc, prec, rec, rps)
+                    "%7.2f secs - step %4d, acc %.2f (%+.2f), prec %.2f, rec %.2f, rps %.2f" %
+                    (time.time() - startTime, step, acc, acc-prevAcc, prec, rec, rps)
                 )
+                prevAcc = acc
             #occasionally save variable values
             if step > 0 and step % TRAINING_SAVE_PERIOD == 0:
                 saver.save(sess, saveFile)
@@ -355,7 +357,7 @@ def testNetwork(net, numSteps, prod, summaryDir, reinitialise, saveFile):
             summaryWriter.add_summary(summary, step)
             if step % TESTING_LOG_PERIOD == 0:
                 print(
-                    "%7.2f secs - step %4d, accuracy %.2f, precision %.2f, recall %.2f" %
+                    "%7.2f secs - step %4d, acc %.2f, prec %.2f, rec %.2f" %
                     (time.time()-startTime, step, acc, prec, rec)
                 )
     accs  = [m[0] for m in metrics]
