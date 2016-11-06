@@ -45,24 +45,17 @@ case "$CMD" in
                 python3 mark_images.py filter -d images -l data_filter.txt -o data_filter.txt
             ;;
             "coarse")
-                python3 mark_images.py coarse -d images -l data.txt -o data.txt
+                python3 mark_images.py coarse -d images -l data_coarse.txt -o data_coarse.txt
                 if [[ "$1" != "keep" ]]; then
-                    NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
-                    NUM_LINES="$(cat data.txt | \
-                        awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++} END {print 0}")"
-                    cat data.txt | awk "NR <  $NUM_LINES" > data_coarse_train.txt
-                    cat data.txt | awk "NR >= $NUM_LINES" > data_coarse_test.txt
-                    rm data.txt
+                    python3 splitData.py data_coarse.txt
+                    rm data_coarse.txt
                 fi
             ;;
             "detailed")
-                python3 mark_images.py detailed -d images -l data.txt -o data.txt
+                python3 mark_images.py detailed -d images -l data_detailed.txt -o data_detailed.txt
                 if [[ "$1" != "keep" ]]; then
-                    NUM_TRAINING="$(grep '^images' data.txt | wc | awk '{print int($1*.75)}')"
-                    NUM_LINES="$(cat data.txt | awk "/^images/ {c++} c==$NUM_TRAINING {print NR; c++}")"
-                    cat data.txt | awk "NR <  $NUM_LINES" > data_detailed_train.txt
-                    cat data.txt | awk "NR >= $NUM_LINES" > data_detailed_test.txt
-                    rm data.txt
+                    python3 splitData.py data_detailed.txt
+                    rm data_detailed.txt
                 fi
             ;;
             *)
@@ -92,19 +85,19 @@ case "$CMD" in
         case "$TYPE" in
             "coarse")
                 if [[ data_coarse_train.txt -nt data_coarse_train.npz ]]; then
-                    python3 use_network.py train data_coarse_train.txt data_coarse_test.txt \
+                    python3 use_network.py train data_coarse_train.txt data_coarse_validate.txt \
                         data_filter.txt -c -o data_coarse -s 100 "$@"
                 else
-                    python3 use_network.py train data_coarse_train.npz data_coarse_test.npz \
+                    python3 use_network.py train data_coarse_train.npz data_coarse_validate.npz \
                         data_filter.txt -c -s 100 "$@"
                 fi
             ;;
             "detailed")
                 if [[ data_detailed_train.txt -nt data_detailed_train.npz ]]; then
-                    python3 use_network.py train data_detailed_train.txt data_detailed_test.txt \
+                    python3 use_network.py train data_detailed_train.txt data_detailed_validate.txt \
                         data_filter.txt -o data_detailed -s 100 "$@"
                 else
-                    python3 use_network.py train data_detailed_train.npz data_detailed_test.npz \
+                    python3 use_network.py train data_detailed_train.npz data_detailed_validate.npz \
                         data_filter.txt -s 100 "$@"
                 fi
             ;;
