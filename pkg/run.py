@@ -59,7 +59,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                 if cellFilter != None and cellFilter[i][j] == 1:
                     results[i][j] = staticFilteredFlag
         #filter with coarse network
-        runNetwork(coarseNet, imageData, results, reinitialise, COARSE_SAVE_FILE)
+        runNetwork(coarseNet, imageData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
         #use detailed network if requested
         if not useCoarseOnly:
             #mark coarse filtered cells
@@ -79,6 +79,9 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                 (time.time() - startTime, filenames[fileIdx]))
         else:
             #write results to image file
+            FILTER_COLOR   = (128, 0, 128, 128)
+            COARSE_COLOR   = (192, 160, 0, 128)
+            DETAILED_COLOR = (0, 255, 0, 128)
             draw = ImageDraw.Draw(image, "RGBA")
             for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
                 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
@@ -94,13 +97,13 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                     if results[i][j] >= 0:
                         if not thresholdGiven:
                             rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-results[i][j]))
-                            draw.rectangle(rect, fill=(0,255,0,96))
+                            draw.rectangle(rect, fill=DETAILED_COLOR)
                         elif results[i][j] > threshold:
-                            draw.rectangle(rect, fill=(0,255,0,96))
+                            draw.rectangle(rect, fill=DETAILED_COLOR)
                     elif results[i][j] == -1:
-                        draw.rectangle(rect, fill=(196,128,0,96))
+                        draw.rectangle(rect, fill=COARSE_COLOR)
                     else:
-                        draw.rectangle(rect, fill=(196,0,0,96))
+                        draw.rectangle(rect, fill=FILTER_COLOR)
             #save the image, and print info
             image.save(outputFilenames[fileIdx])
             print("%7.2f secs - wrote image %s" % \
