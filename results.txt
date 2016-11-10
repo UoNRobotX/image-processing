@@ -1,0 +1,23 @@
+coarse: (batch size 1000, 500 test steps)
+    [30], adam, sigmoid, squared error, 
+        3000 - 0.75, 0.61, 0.98 //pretty bad
+    [30], adam, sigmoid, squared error, normalize inputs, 
+        1500 - 0.91, 0.87, 0.92 //5 bad, not great with green buoys, 
+    [30, 10], adam, sigmoid, squared error, normalize inputs, 
+        3000 - 0.94, 0.90, 0.95 //9 bad, not great with green buoys, 
+    [30, 30], adam, sigmoid, squared error, normalize inputs, 
+        3000 - 0.94, 0.91, 0.94
+    [30, 10], adam, relu and sigmoid, squared error, normalize inputs, 
+        3000 - 0.94, 0.89, 0.96 //11 bad, not great with green buoys, very binary, several restarts, 
+    [30, 10], adam, prelu and sigmoid, squared error, normalize inputs, 
+        3000 - 0.93, 0.89, 0.95 //9 bad, not great with green buoys, several restarts, 
+    [30, 10], adam, sigmoid, softmax cross entropy with logits, normalize inputs, 
+        3000 - 0.93, 0.87, 0.96 //reaches 0.90 quickly, 9 bad, very binary, not great with green buoys, 
+    [30, 10], adam, relu and sigmoid, softmax cross entropy with logits, normalize inputs, several restarts, 
+        3000 - 0.94, 0.89, 0.95 //10 bad, very binary, not great with green buoys, 
+    [30, 10], adam, sigmoid, softmax cross entropy with logits, normalize inputs, sharpen input, 
+        3000 - 0.93, 0.89, 0.94
+    [30, 10], adam, sigmoid, softmax cross entropy with logits, normalize inputs, use edge finder, 
+        3000 - 0.93, 0.88, 0.95 //not great
+detailed: (batch size 1000, 500 test steps)
+    

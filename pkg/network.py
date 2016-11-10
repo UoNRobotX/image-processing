@@ -25,8 +25,8 @@ def createCoarseNetwork(threshold):
     PREPROCESS_GRAY = False
     PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
-    HIDDEN_LAYERS = [30]
-    COST_FUNC = "squared_error" #"squared_error", "logistic_loss"
+    HIDDEN_LAYERS = [30, 10]
+    COST_FUNC = "squared_error" #"squared_error", "logistic_loss", "softmax_cross_entropy_with_logits"
     OPTIMIZER = "adam"
         #"adam", "gradient_descent", "adadelta", "adagrad", "momentum", "ftrl", "rmsprop"
     DROPOUT = False
@@ -87,6 +87,8 @@ def createCoarseNetwork(threshold):
             elif COST_FUNC == "logistic_loss":
                 cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y_))
                 cost = tf.reduce_mean(cost, 1)
+            elif COST_FUNC == "softmax_cross_entropy_with_logits":
+                cost = tf.nn.softmax_cross_entropy_with_logits(y, y_)
             else:
                 raise Exception("Unrecognised cost function")
             addSummaries(cost, summaries, "cost", "mean")
@@ -380,16 +382,24 @@ def runNetwork(net, imageData, results, reinitialise, saveFile):
             sess.run(tf.initialize_all_variables())
         else:
             tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
-        #run on each cell
+        #get cells
+        cells = []
+        data = []
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
             for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
                 if results[i][j] >= 0:
-                    out = net.y.eval(feed_dict={
-                        net.x: imageData[:, INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
-                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :],
-                        net.p_dropout: 1.0
-                    })
-                    results[i][j] = out[0][0]
+                    data.append(imageData[INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
+                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :])
+                    cells.append([i, j])
+        #run on cells
+        outputs = net.y.eval(feed_dict={
+            net.x: data,
+            net.p_dropout: 1.0
+        })
+        #get results
+        for i in range(len(cells)):
+            indices = cells[i]
+            results[indices[0]][indices[1]] = outputs[i][0]
 
 def prelu(x, name=None):
     alphas = tf.Variable(tf.constant(0.0, shape=[x.get_shape()[-1]]))

@@ -45,7 +45,6 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
         #obtain numpy array
         imageData = np.array(list(image_scaled.getdata())).astype(np.float32)
         imageData = imageData.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
-        imageData = np.array([imageData])
         #used for storing results
         results = [
             [0 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH)]
