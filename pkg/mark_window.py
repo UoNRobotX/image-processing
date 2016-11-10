@@ -152,7 +152,6 @@ class Window:
         hscale = event.height/self.canvasHeight
         self.canvasWidth  = event.width
         self.canvasHeight = event.height
-        self.canvas.config(width=self.canvasWidth, height=self.canvasHeight)
         self.canvas.scale("all", 0, 0, wscale, hscale)
         self.canvas.delete(self.canvasImage)
         self.imageTk = ImageTk.PhotoImage(
