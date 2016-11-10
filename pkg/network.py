@@ -21,6 +21,7 @@ def createCoarseNetwork(threshold):
     WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
     BIASES_INIT = 1.0
     ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
+    OUTPUT_ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     PREPROCESS_GRAY = False
     PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
@@ -30,7 +31,7 @@ def createCoarseNetwork(threshold):
         #"adam", "gradient_descent", "adadelta", "adagrad", "momentum", "ftrl", "rmsprop"
     DROPOUT = False
     #helper functions
-    def createLayer(input, inSize, outSize, layerName, summaries):
+    def createLayer(input, inSize, outSize, layerName, summaries, activation=ACTIVATION_FUNC):
         with tf.name_scope(layerName):
             with tf.name_scope("weights"):
                 w = tf.Variable(WEIGHTS_INIT([inSize, outSize]))
@@ -41,7 +42,7 @@ def createCoarseNetwork(threshold):
             wb = tf.matmul(input, w) + b
             if DROPOUT:
                 wb = tf.nn.dropout(wb, p_dropout)
-            return ACTIVATION_FUNC(wb, name="out")
+            return activation(wb, name="out")
     #create nodes
     summaries = []
     graph = tf.Graph()
@@ -52,7 +53,6 @@ def createCoarseNetwork(threshold):
             x = tf.placeholder(tf.float32, \
                 [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
             y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
-            y2 = tf.slice(y_, [0, 0], [-1, 1])
             p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
         with tf.name_scope("process_input"):
             if PREPROCESS_GRAY:
@@ -78,14 +78,15 @@ def createCoarseNetwork(threshold):
                 layer, layerSizes[i-1], layerSizes[i], "hidden_layer" + str(i), summaries
             )
         y = createLayer(
-            layer, layerSizes[-1], 1, "output_layer", summaries
+            layer, layerSizes[-1], 2, "output_layer", summaries, OUTPUT_ACTIVATION_FUNC
         )
         #cost
         with tf.name_scope("cost"):
             if COST_FUNC == "squared_error":
-                cost = tf.square(y2 - y)
+                cost = tf.reduce_mean(tf.square(y_ - y), 1)
             elif COST_FUNC == "logistic_loss":
-                cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y2))
+                cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y_))
+                cost = tf.reduce_mean(cost, 1)
             else:
                 raise Exception("Unrecognised cost function")
             addSummaries(cost, summaries, "cost", "mean")
@@ -109,8 +110,8 @@ def createCoarseNetwork(threshold):
                 raise Exception("Unrecognised optimizer")
         #metrics
         with tf.name_scope("metrics"):
-            y_pred = tf.greater(y, tf.constant(threshold))
-            y2_pred = tf.greater(y2, tf.constant(0.5))
+            y_pred = tf.greater(tf.slice(y, [0, 0], [-1, 1]), tf.constant(threshold))
+            y2_pred = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.constant(0.5))
             correctness = tf.equal(y_pred, y2_pred)
             #accuracy
             accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
