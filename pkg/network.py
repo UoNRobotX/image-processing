@@ -18,16 +18,16 @@ class Network:
         self.summaries = tf.merge_summary(summaries)
 
 def createCoarseNetwork(threshold):
-    WEIGHTS_INIT = tf.truncated_normal or tf.random_normal or tf.random_uniform
+    WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
     BIASES_INIT = 1.0
-    ACTIVATION_FUNC = tf.nn.sigmoid or tf.nn.tanh or tf.nn.relu or prelu
+    ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     PREPROCESS_GRAY = False
     PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
     HIDDEN_LAYERS = [30]
-    COST_FUNC = "squared_error" or "logistic_loss"
-    OPTIMIZER = "adam" or "gradient_descent" or "adadelta" or \
-        "adagrad" or "momentum" or "ftrl" or "rmsprop"
+    COST_FUNC = "squared_error" #"squared_error", "logistic_loss"
+    OPTIMIZER = "adam"
+        #"adam", "gradient_descent", "adadelta", "adagrad", "momentum", "ftrl", "rmsprop"
     DROPOUT = False
     #helper functions
     def createLayer(input, inSize, outSize, layerName, summaries):
@@ -94,17 +94,17 @@ def createCoarseNetwork(threshold):
             if OPTIMIZER == "adam":
                 train = tf.train.AdamOptimizer().minimize(cost)
             elif OPTIMIZER == "gradient_descent":
-                train = tf.train.GradientDescentOptimizer(0.01)
+                train = tf.train.GradientDescentOptimizer(0.01).minimize(cost)
             elif OPTIMIZER == "adadelta":
-                train = tf.train.AdadeltaOptimizer()
+                train = tf.train.AdadeltaOptimizer().minimize(cost)
             elif OPTIMIZER == "adagrad":
-                train = tf.train.AdagradOptimizer(0.01)
+                train = tf.train.AdagradOptimizer(0.01).minimize(cost)
             elif OPTIMIZER == "momentum":
-                train = tf.train.MomentumOptimizer(0.01)
+                train = tf.train.MomentumOptimizer(0.01, 0.5).minimize(cost)
             elif OPTIMIZER == "ftrl":
-                train = tf.train.FtrlOptimizer(0.01)
+                train = tf.train.FtrlOptimizer(0.01).minimize(cost)
             elif OPTIMIZER == "rmsprop":
-                train = tf.train.RMSPropOptimizer(0.01)
+                train = tf.train.RMSPropOptimizer(0.01).minimize(cost)
             else:
                 raise Exception("Unrecognised optimizer")
         #metrics
