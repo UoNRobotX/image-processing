@@ -245,13 +245,13 @@ class DetailedBatchProducer:
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 cellImages = [cellImg]
-                if False: #add rotated images
+                if True and containsBuoy: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
-                if False and containsBuoy: #add flipped images
+                if True and containsBuoy: #add flipped images
                     cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
-                if False and containsBuoy: #add sheared images
-                    for maxShearFactor in [0.2, 0.2]:
+                if True and containsBuoy: #add sheared images
+                    for maxShearFactor in [0.1, 0.2]:
                         shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
                         cellImages += [
                             img.transform(

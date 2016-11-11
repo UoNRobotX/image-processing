@@ -58,7 +58,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                 if cellFilter != None and cellFilter[i][j] == 1:
                     results[i][j] = staticFilteredFlag
         #filter with coarse network
-        runNetwork(coarseNet, imageData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
+        #runNetwork(coarseNet, imageData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
         #use detailed network if requested
         if not useCoarseOnly:
             #mark coarse filtered cells

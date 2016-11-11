@@ -5,6 +5,7 @@ coarse: (batch size 1000, 500 test steps)
         1500 - 0.91, 0.87, 0.92 //5 bad, not great with green buoys, 
     [30, 10], adam, sigmoid, squared error, normalize inputs, 
         3000 - 0.94, 0.90, 0.95 //9 bad, not great with green buoys, 
+        //current
     [30, 30], adam, sigmoid, squared error, normalize inputs, 
         3000 - 0.94, 0.91, 0.94
     [30, 10], adam, relu and sigmoid, squared error, normalize inputs, 
@@ -19,5 +20,25 @@ coarse: (batch size 1000, 500 test steps)
         3000 - 0.93, 0.89, 0.94
     [30, 10], adam, sigmoid, softmax cross entropy with logits, normalize inputs, use edge finder, 
         3000 - 0.93, 0.88, 0.95 //not great
-detailed: (batch size 1000, 500 test steps)
-    
+detailed: (batch size 50, 500 test steps)
+    conv (5x5->32, max, 5x5->64, max), dense (64->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.91, 0.92, 0.88 //missed buoys are far away, some bad false positives
+    conv (5x5->32, max, 5x5->64, max), dense (32->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.91, 0.93, 0.86
+    conv (5x5->32, max, 5x5->32, max), dense (32->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.90, 0.89, 0.88
+    conv (5x5->16, max, 5x5->32, max), dense (32->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.92, 0.91, 0.90
+    conv (5x5->16, max, 5x5->16, max), dense (32->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.87, 0.82, 0.91
+    conv (5x5->16, max, 5x5->32, max), dense (16->2), dropout 0.5, cross entropy cost, adam, normalise input
+        3000 - 0.88, 0.84, 0.91
+    conv (5x5->16, max, 5x5->32, max), dense (32->2), dropout 0.75, cross entropy cost, adam, normalise input
+        3000 - 0.90, 0.88, 0.89
+        6000 - 0.89, 0.94, 0.79
+        7000 - 0.92, 0.93, 0.88
+    conv (5x5->16, max, 5x5->32, max), dense (32->2), dropout 0.9, cross entropy cost, adam, normalise input
+        3000 - 0.91, 0.90, 0.90
+    conv (5x5->16, max, 5x5->32, max), dense (64->2), dropout 0.9, cross entropy cost, adam, normalise input
+        3000 - 0.92, 0.91, 0.91
+        //current

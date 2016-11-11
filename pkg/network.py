@@ -185,33 +185,27 @@ def createDetailedNetwork():
             addSummaries(x2, summaries, "input", "image")
         #first convolutional layer
         with tf.name_scope("conv_layer1"):
-            w1 = createWeights([5, 5, 3, 32]) #filter_height, filter_width, in_channels, out_channels
-            b1 = createBiases([32])
+            w1 = createWeights([5, 5, 3, 16]) #filter_height, filter_width, in_channels, out_channels
+            b1 = createBiases([16])
             c1 = createConv(x2, w1, b1)
             p1 = createPool(c1)
-            #addSummaries(w1, summaries, "conv_layer1", "mean_stddev_hist")
-            #addSummaries(b1, summaries, "conv_layer1", "mean_stddev_hist")
         #second convolutional layer
         with tf.name_scope("conv_layer2"):
-            w2 = createWeights([5, 5, 32, 64])
-            b2 = createBiases([64])
+            w2 = createWeights([5, 5, 16, 32])
+            b2 = createBiases([32])
             c2 = createConv(p1, w2, b2)
             p2 = createPool(c2)
-            #addSummaries(w2, summaries, "conv_layer2", "mean_stddev_hist")
-            #addSummaries(b2, summaries, "conv_layer2", "mean_stddev_hist")
         #densely connected layer
         with tf.name_scope("dense_layer"):
-            w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64, 1024])
-            b3 = createBiases([1024])
-            p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 64])
+            w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 32, 64])
+            b3 = createBiases([64])
+            p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 32])
             h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
-            #addSummaries(w3, summaries, "dense_layer", "mean_stddev_hist")
-            #addSummaries(b3, summaries, "dense_layer", "mean_stddev_hist")
         #dropout
         h1_dropout = tf.nn.dropout(h1, p_dropout)
         #readout layer
         with tf.name_scope("readout_layer"):
-            w4 = createWeights([1024, 2])
+            w4 = createWeights([64, 2])
             b4 = createBiases([2])
             y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
         #cost
@@ -286,7 +280,7 @@ def trainNetwork(net, numSteps, prod, testProd, summaryDir, testSummaryDir, rein
         else:
             saver.restore(sess, saveFile)
         #do training
-        p_dropout = 0.5 #only used if enabled in 'createCoarseNetwork'
+        p_dropout = 0.9 #1.0 means no dropout
         prevAcc = 0.0
         for step in range(numSteps):
             inputs, outputs = prod.getBatch(BATCH_SIZE)
