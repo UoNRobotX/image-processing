@@ -41,11 +41,12 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
     for fileIdx in range(len(filenames)):
         startTime = time.time()
         results = [
-            [0 for j in range(IMG_WIDTH//CELL_WIDTH)]
+            [None for j in range(IMG_WIDTH//CELL_WIDTH)]
             for i in range(IMG_HEIGHT//CELL_HEIGHT)
-        ]
-        staticFilteredFlag = -2
-        coarseFilteredFlag = -1
+        ] #has elements of the form [flag, output_value]
+        FLAG_FILTER       = 0
+        FLAG_COARSE_NET   = 1
+        FLAG_DETAILED_NET = 2
         #obtain PIL image
         image = Image.open(filenames[fileIdx])
         #get cells
@@ -55,7 +56,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
             for col in range(IMG_WIDTH//CELL_WIDTH):
                 if cellFilter[row][col] == 1:
                     #filter with static filter
-                    results[row][col] = staticFilteredFlag
+                    results[row][col] = [FLAG_FILTER, None]
                 else:
                     #get cell image
                     cellImg = image.crop(
@@ -70,58 +71,68 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                 (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
             ) for cellImg in cellImgs
         ]
-        #end pre-processing
         preProcessingTime = time.time() - startTime
-        #filter with coarse network
-        outputs = runNetwork(coarseNet, inputs, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
-        #use detailed network if requested
-        if not useCoarseOnly:
-            #mark coarse filtered cells
-            unfiltered = []
+        #use networks
+        if useCoarseOnly:
+            outputs = runNetwork(coarseNet, inputs, reinitialise, COARSE_SAVE_FILE)
             for i in range(len(outputs)):
-                if outputs[i][0] > threshold:
-                    results[cellIndices[i][0]][cellIndices[i][1]] = coarseFilteredFlag
-                else:
-                    unfiltered.append(i)
-            inputs = [inputs[i] for i in unfiltered]
-            cellIndices = [cellIndices[i] for i in unfiltered]
-            #run detailed network
+                results[cellIndices[i][0]][cellIndices[i][1]] = [FLAG_COARSE_NET, outputs[i]]
+        else:
+            if True: #use coarse network
+                outputs = runNetwork(coarseNet, inputs, False, COARSE_SAVE_FILE)
+                #mark coarse filtered cells
+                unfiltered = []
+                for i in range(len(outputs)):
+                    if outputs[i][0] > threshold:
+                        results[cellIndices[i][0]][cellIndices[i][1]] = [FLAG_COARSE_NET, outputs[i]]
+                    else:
+                        unfiltered.append(i)
+                inputs = [inputs[i] for i in unfiltered]
+                cellIndices = [cellIndices[i] for i in unfiltered]
+            #use detailed network
             outputs = runNetwork(detailedNet, inputs, reinitialise, DETAILED_SAVE_FILE)
-        #store results
-        for i in range(len(outputs)):
-            results[cellIndices[i][0]][cellIndices[i][1]] = outputs[i][0]
+            for i in range(len(outputs)):
+                results[cellIndices[i][0]][cellIndices[i][1]] = [FLAG_DETAILED_NET, outputs[i]]
         #end processing
         processingTime = time.time() - startTime - preProcessingTime
         #output results
         if textOutput != None:
             textOutput.append(filenames[fileIdx])
             for row in results:
-                line = ["1" if cell > threshold else "0" for cell in row]
+                line = [
+                    "1" if cell[0] == FLAG_COARSE_NET and cell[1][0] > threshold else
+                    "0" for cell in row
+                ]
                 textOutput.append(" " + "".join(line))
             print("Processed %s, pre-processing time %.2f secs, processing time %.2f secs" % \
                 (filenames[fileIdx], preProcessingTime, processingTime))
         else:
             #write results to image file
-            FILTER_COLOR   = (128, 0, 128, 128)
-            COARSE_COLOR   = (192, 160, 0, 128)
-            DETAILED_COLOR = (0, 255, 0, 128)
+            FILTER_COLOR      = (128, 0, 128, 128)
+            SECONDARY_COLOR   = (192, 160, 0, 128)
+            PRIMARY_COLOR_POS = (0, 255, 0, 96)
+            PRIMARY_COLOR_NEG = (255, 0, 0, 96)
             draw = ImageDraw.Draw(image, "RGBA")
             for i in range(IMG_HEIGHT//CELL_HEIGHT):
                 for j in range(IMG_WIDTH//CELL_WIDTH):
-                    #draw a rectangle, indicating confidence, coarse filtering, or filtering
                     rect = [CELL_WIDTH*j, CELL_HEIGHT*i, CELL_WIDTH*(j+1), CELL_HEIGHT*(i+1)]
                     #draw a grid cell outline
                     draw.rectangle(rect, outline=(0,0,0,255))
-                    if results[i][j] >= 0:
-                        if not thresholdGiven:
-                            rect[1] += int(CELL_HEIGHT*(1-results[i][j]))
-                            draw.rectangle(rect, fill=DETAILED_COLOR)
-                        elif results[i][j] > threshold:
-                            draw.rectangle(rect, fill=DETAILED_COLOR)
-                    elif results[i][j] == -1:
-                        draw.rectangle(rect, fill=COARSE_COLOR)
-                    else:
+                    #draw a rectangle indicating static/coarse_net/detailed_net filtering
+                    result = results[i][j]
+                    if result[0] == FLAG_FILTER:
                         draw.rectangle(rect, fill=FILTER_COLOR)
+                    elif not useCoarseOnly and result[0] == FLAG_COARSE_NET:
+                        draw.rectangle(rect, fill=SECONDARY_COLOR)
+                    else:
+                        rect1 = rect.copy()
+                        rect1[1] += int(CELL_HEIGHT*(1-result[1][0]))
+                        rect1[2] -= CELL_WIDTH//2
+                        rect2 = rect.copy()
+                        rect2[0] += CELL_WIDTH//2
+                        rect2[3] -= int(CELL_HEIGHT*(1-result[1][1]))
+                        draw.rectangle(rect1, fill=PRIMARY_COLOR_POS)
+                        draw.rectangle(rect2, fill=PRIMARY_COLOR_NEG)
             #save the image, and print info
             image.save(outputFilenames[fileIdx])
             print("Wrote image %s, pre-processing time %.2f, processing time %.2f secs" % \
