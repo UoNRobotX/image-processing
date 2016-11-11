@@ -39,62 +39,67 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
         detailedNet = createDetailedNetwork()
     #iterate through input images
     for fileIdx in range(len(filenames)):
-        #obtain PIL image
-        image = Image.open(filenames[fileIdx])
-        #start processing
         startTime = time.time()
-        #get cells
-        cellImages = []
-        for row in range(IMG_HEIGHT//CELL_HEIGHT):
-            cellImages.append([])
-            for col in range(IMG_WIDTH//CELL_WIDTH):
-                cellImg = image.crop(
-                    (col*CELL_WIDTH, row*CELL_HEIGHT, (col+1)*CELL_WIDTH, (row+1)*CELL_HEIGHT)
-                )
-                cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
-                cellImages[-1].append(cellImg)
-        #obtain numpy arrays
-        cellData = [
-            [
-                np.array(list(cellImages[row][col].getdata())).astype(np.float32).reshape(
-                    (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
-                ) for col in range(len(cellImages[row]))
-            ]
-            for row in range(len(cellImages))
-        ]
-        #used for storing results
         results = [
             [0 for j in range(IMG_WIDTH//CELL_WIDTH)]
             for i in range(IMG_HEIGHT//CELL_HEIGHT)
         ]
         staticFilteredFlag = -2
         coarseFilteredFlag = -1
-        #filter with static filter
-        for i in range(IMG_HEIGHT//CELL_HEIGHT):
-            for j in range(IMG_WIDTH//CELL_WIDTH):
-                if cellFilter != None and cellFilter[i][j] == 1:
-                    results[i][j] = staticFilteredFlag
+        #obtain PIL image
+        image = Image.open(filenames[fileIdx])
+        #get cells
+        cellImgs = []
+        cellIndices = []
+        for row in range(IMG_HEIGHT//CELL_HEIGHT):
+            for col in range(IMG_WIDTH//CELL_WIDTH):
+                if cellFilter[row][col] == 1:
+                    #filter with static filter
+                    results[row][col] = staticFilteredFlag
+                else:
+                    #get cell image
+                    cellImg = image.crop(
+                        (col*CELL_WIDTH, row*CELL_HEIGHT, (col+1)*CELL_WIDTH, (row+1)*CELL_HEIGHT)
+                    )
+                    cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
+                    cellImgs.append(cellImg)
+                    cellIndices.append([row, col])
+        #obtain numpy arrays
+        inputs = [
+            np.array(list(cellImg.getdata())).astype(np.float32).reshape(
+                (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
+            ) for cellImg in cellImgs
+        ]
+        #end pre-processing
+        preProcessingTime = time.time() - startTime
         #filter with coarse network
-        runNetwork(coarseNet, cellData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
+        outputs = runNetwork(coarseNet, inputs, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
         #use detailed network if requested
         if not useCoarseOnly:
             #mark coarse filtered cells
-            for i in range(len(results)):
-                for j in range(len(results[i])):
-                    if results[i][j] > threshold:
-                        results[i][j] = coarseFilteredFlag
+            unfiltered = []
+            for i in range(len(outputs)):
+                if outputs[i][0] > threshold:
+                    results[cellIndices[i][0]][cellIndices[i][1]] = coarseFilteredFlag
+                else:
+                    unfiltered.append(i)
+            inputs = [inputs[i] for i in unfiltered]
+            cellIndices = [cellIndices[i] for i in unfiltered]
             #run detailed network
-            runNetwork(detailedNet, cellData, results, reinitialise, DETAILED_SAVE_FILE)
+            outputs = runNetwork(detailedNet, inputs, reinitialise, DETAILED_SAVE_FILE)
+        #store results
+        for i in range(len(outputs)):
+            results[cellIndices[i][0]][cellIndices[i][1]] = outputs[i][0]
         #end processing
-        processingTime = time.time() - startTime
+        processingTime = time.time() - startTime - preProcessingTime
         #output results
         if textOutput != None:
             textOutput.append(filenames[fileIdx])
             for row in results:
                 line = ["1" if cell > threshold else "0" for cell in row]
                 textOutput.append(" " + "".join(line))
-            print("Processed %s, processing time %.2f secs" % \
-                (filenames[fileIdx], processingTime))
+            print("Processed %s, pre-processing time %.2f secs, processing time %.2f secs" % \
+                (filenames[fileIdx], preProcessingTime, processingTime))
         else:
             #write results to image file
             FILTER_COLOR   = (128, 0, 128, 128)
@@ -119,39 +124,24 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                         draw.rectangle(rect, fill=FILTER_COLOR)
             #save the image, and print info
             image.save(outputFilenames[fileIdx])
-            print("Wrote image %s, processing time %.2f secs" % \
-                (outputFilenames[fileIdx], processingTime))
+            print("Wrote image %s, pre-processing time %.2f, processing time %.2f secs" % \
+                (outputFilenames[fileIdx], preProcessingTime, processingTime))
     if textOutput != None:
         #write results to training/testing data file (used to bootstrap training)
         with open(outFile, "w") as file:
             for line in textOutput:
                 file.write(line + "\n")
 
-def runNetwork(net, cellData, results, reinitialise, saveFile):
-    """ Run the network on cells of an image, inserting them into 'results'.
-        Only runs on cells where results[i][j] is non-negative.
-    """
+def runNetwork(net, inputs, reinitialise, saveFile):
     with tf.Session(graph=net.graph) as sess:
         #reinitialise or load values
         if reinitialise or not os.path.exists(saveFile):
             sess.run(tf.initialize_all_variables())
         else:
             tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
-        #get cells
-        cells = []
-        inputs = []
-        for i in range(IMG_HEIGHT//CELL_HEIGHT):
-            for j in range(IMG_WIDTH//CELL_WIDTH):
-                if results[i][j] >= 0:
-                    inputs.append(cellData[i][j])
-                    cells.append([i, j])
-        #run on cells
+        #run
         outputs = net.y.eval(feed_dict={
             net.x: inputs,
             net.p_dropout: 1.0
         })
-        #get results
-        for i in range(len(cells)):
-            indices = cells[i]
-            results[indices[0]][indices[1]] = outputs[i][0]
-
+        return outputs
