@@ -14,7 +14,7 @@ description = """
     Pressing escape exits the application.
     By default, information about the markings is written to stdout.
 
-    "mode1" may be one of the following:
+    The mode may be one of the following:
         filter
             The user marks grid cells to be ignored (camera boundaries, roof, etc).
             Clicking or dragging over a cell toggles whether it is marked.
@@ -40,12 +40,17 @@ parser = argparse.ArgumentParser(
     description=description,
     formatter_class=argparse.RawDescriptionHelpFormatter
 )
-parser.add_argument("mode", metavar="mode1", choices=["filter", "coarse", "detailed"])
-parser.add_argument("-d", dest="inputDir",   help="Use JPG files in a directory as the images to mark.")
-parser.add_argument("-o", dest="outputFile", help="Write output to a file instead of to stdout.")
-parser.add_argument("-l", dest="loadFile",   help="Load mark data from a file.")
-parser.add_argument("-g", dest="skipFile",   help="Skip to a file in the list.")
-parser.add_argument("-s", dest="saveDir",    help="Save the images, with markings, to a directory.")
+parser.add_argument("mode", choices=["filter", "coarse", "detailed"])
+parser.add_argument("-d", dest="inputDir", \
+    help="Use JPG files in a directory as the image list.")
+parser.add_argument("-o", dest="outputFile", \
+    help="Write output to a file instead of to stdout.")
+parser.add_argument("-l", dest="loadFile", \
+    help="Load mark data from a file, whose format must correspond to the mode.")
+parser.add_argument("-g", dest="skipFile", \
+    help="Skip to a named file in the list.")
+parser.add_argument("-s", dest="saveDir", \
+    help="Save the images, with markings, to a directory.")
 args = parser.parse_args()
 
 #set variables from command line arguments

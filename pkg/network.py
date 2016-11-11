@@ -366,7 +366,7 @@ def testNetwork(net, numSteps, prod, summaryDir, reinitialise, saveFile):
     )
     summaryWriter.close()
 
-def runNetwork(net, imageData, results, reinitialise, saveFile):
+def runNetwork(net, cellData, results, reinitialise, saveFile):
     """ Run the network on cells of an image, inserting them into 'results'.
         Only runs on cells where results[i][j] is non-negative.
     """
@@ -378,16 +378,15 @@ def runNetwork(net, imageData, results, reinitialise, saveFile):
             tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
         #get cells
         cells = []
-        data = []
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+        inputs = []
+        for i in range(IMG_HEIGHT//CELL_HEIGHT):
+            for j in range(IMG_WIDTH//CELL_WIDTH):
                 if results[i][j] >= 0:
-                    data.append(imageData[INPUT_HEIGHT*i:INPUT_HEIGHT*(i+1), \
-                            INPUT_WIDTH*j:INPUT_WIDTH*(j+1), :])
+                    inputs.append(cellData[i][j])
                     cells.append([i, j])
         #run on cells
         outputs = net.y.eval(feed_dict={
-            net.x: data,
+            net.x: inputs,
             net.p_dropout: 1.0
         })
         #get results

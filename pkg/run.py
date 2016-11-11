@@ -40,26 +40,41 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
     for fileIdx in range(len(filenames)):
         #obtain PIL image
         image = Image.open(filenames[fileIdx])
-        image_scaled = image.resize((IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT), resample=Image.LANCZOS)
-        #obtain numpy array
-        imageData = np.array(list(image_scaled.getdata())).astype(np.float32)
-        imageData = imageData.reshape((IMG_SCALED_HEIGHT, IMG_SCALED_WIDTH, IMG_CHANNELS))
+        #start processing
+        startTime = time.time()
+        #get cells
+        cellImages = []
+        for row in range(IMG_HEIGHT//CELL_HEIGHT):
+            cellImages.append([])
+            for col in range(IMG_WIDTH//CELL_WIDTH):
+                cellImg = image.crop(
+                    (col*CELL_WIDTH, row*CELL_HEIGHT, (col+1)*CELL_WIDTH, (row+1)*CELL_HEIGHT)
+                )
+                cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
+                cellImages[-1].append(cellImg)
+        #obtain numpy arrays
+        cellData = [
+            [
+                np.array(list(cellImages[row][col].getdata())).astype(np.float32).reshape(
+                    (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
+                ) for col in range(len(cellImages[row]))
+            ]
+            for row in range(len(cellImages))
+        ]
         #used for storing results
         results = [
-            [0 for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH)]
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT)
+            [0 for j in range(IMG_WIDTH//CELL_WIDTH)]
+            for i in range(IMG_HEIGHT//CELL_HEIGHT)
         ]
         staticFilteredFlag = -2
         coarseFilteredFlag = -1
-        #start processing
-        startTime = time.time()
         #filter with static filter
-        for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-            for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+        for i in range(IMG_HEIGHT//CELL_HEIGHT):
+            for j in range(IMG_WIDTH//CELL_WIDTH):
                 if cellFilter != None and cellFilter[i][j] == 1:
                     results[i][j] = staticFilteredFlag
         #filter with coarse network
-        #runNetwork(coarseNet, imageData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
+        runNetwork(coarseNet, cellData, results, useCoarseOnly and reinitialise, COARSE_SAVE_FILE)
         #use detailed network if requested
         if not useCoarseOnly:
             #mark coarse filtered cells
@@ -68,7 +83,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                     if results[i][j] > threshold:
                         results[i][j] = coarseFilteredFlag
             #run detailed network
-            runNetwork(detailedNet, imageData, results, reinitialise, DETAILED_SAVE_FILE)
+            runNetwork(detailedNet, cellData, results, reinitialise, DETAILED_SAVE_FILE)
         #end processing
         processingTime = time.time() - startTime
         #output results
@@ -85,20 +100,15 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
             COARSE_COLOR   = (192, 160, 0, 128)
             DETAILED_COLOR = (0, 255, 0, 128)
             draw = ImageDraw.Draw(image, "RGBA")
-            for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
+            for i in range(IMG_HEIGHT//CELL_HEIGHT):
+                for j in range(IMG_WIDTH//CELL_WIDTH):
                     #draw a rectangle, indicating confidence, coarse filtering, or filtering
-                    rect = [
-                        INPUT_WIDTH*IMG_DOWNSCALE*j,
-                        INPUT_HEIGHT*IMG_DOWNSCALE*i,
-                        INPUT_WIDTH*IMG_DOWNSCALE*(j+1),
-                        INPUT_HEIGHT*IMG_DOWNSCALE*(i+1),
-                    ]
+                    rect = [CELL_WIDTH*j, CELL_HEIGHT*i, CELL_WIDTH*(j+1), CELL_HEIGHT*(i+1)]
                     #draw a grid cell outline
                     draw.rectangle(rect, outline=(0,0,0,255))
                     if results[i][j] >= 0:
                         if not thresholdGiven:
-                            rect[1] += int(INPUT_HEIGHT*IMG_DOWNSCALE*(1-results[i][j]))
+                            rect[1] += int(CELL_HEIGHT*(1-results[i][j]))
                             draw.rectangle(rect, fill=DETAILED_COLOR)
                         elif results[i][j] > threshold:
                             draw.rectangle(rect, fill=DETAILED_COLOR)

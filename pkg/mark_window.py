@@ -14,11 +14,10 @@ class Window:
         self.saveDir    = saveDir
         #fields used when traversing the file list
         self.fileIdx   = 0
-        self.filenames = None
         self.filenames = [name for name in fileMarks]
         self.filenames.sort()
         #fields used to hold mark data
-        self.sel           = [[0,0], [0,0]] #corner positions of a box created while dragging the mouse
+        self.sel           = [[0,0], [0,0]] #corners of a box created while dragging the mouse
         self.box           = None   #holds the ID of a rectangle shown while dragging the mouse
         self.boxCoords     = []     #[[x,y,x,y], ...], describes created boxes or marked cells
         self.boxIDs        = []     #holds IDs of elements in "boxCoords"
@@ -36,16 +35,12 @@ class Window:
         #create window
         self.window = tkinter.Tk()
         self.window.title(self.filenames[self.fileIdx])
-        #obtain image, and downscale it
+        #obtain image
         self.image = Image.open(self.filenames[self.fileIdx])
-        self.checkImage(self.image, self.filenames[self.fileIdx])
-        self.image = self.image.resize(
-            (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-            resample=Image.LANCZOS
-        )
+        checkImage(self.image, self.filenames[self.fileIdx])
         #create canvas, and add the image to it
-        self.canvasWidth = self.image.size[0]
-        self.canvasHeight = self.image.size[1]
+        self.canvasWidth = IMG_WIDTH
+        self.canvasHeight = IMG_HEIGHT
         self.canvas = tkinter.Canvas(
             self.window, width=self.canvasWidth, height=self.canvasHeight
         )
@@ -58,18 +53,18 @@ class Window:
         if mode == "filter" or mode == "coarse":
             #initialise cells
             self.cells = [
-                [None for row in range(self.image.size[1]//INPUT_HEIGHT)]
-                for col in range(self.image.size[0]//INPUT_WIDTH)
+                [None for row in range(IMG_HEIGHT//CELL_HEIGHT)]
+                for col in range(IMG_WIDTH//CELL_WIDTH)
             ]
             #create cell outlines
             for i in range(len(self.cells)):
-                for j in range(len(self.cells[0])):
+                for j in range(len(self.cells[i])):
                     self.boxIDs.append(
                         self.canvas.create_rectangle(
-                            i*INPUT_WIDTH,
-                            j*INPUT_HEIGHT,
-                            (i+1)*INPUT_WIDTH,
-                            (j+1)*INPUT_HEIGHT
+                            i*CELL_WIDTH,
+                            j*CELL_HEIGHT,
+                            (i+1)*CELL_WIDTH,
+                            (j+1)*CELL_HEIGHT
                         )
                     )
             #setup handlers
@@ -83,27 +78,22 @@ class Window:
         tkinter.mainloop()
     #setup functions
     def setupMarkFilter(self):
-        #set handlers
-        self.canvas.bind("<Configure>", self.resizeCallback)
-        self.canvas.bind("<Button-1>",  self.markCellClickCallback)
-        self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
         #load cell filter if provided
         if self.cellFilter != None:
             for row in range(len(self.cellFilter)):
                 for col in range(len(self.cellFilter[0])):
                     if self.cellFilter[row][col] == 1:
                         self.toggleCell(col, row)
-        #set more handlers
-        self.window.bind("<Return>", self.markFilterNextCallback)
-        self.window.bind("<Right>",  self.markFilterNextCallback)
-        self.window.bind("<Left>",   self.markFilterPrevCallback)
-        self.window.bind("<Escape>", self.markFilterEscapeCallback)
-        self.window.protocol("WM_DELETE_WINDOW", self.markFilterEscapeCallback)
-    def setupMarkCoarse(self):
         #set handlers
         self.canvas.bind("<Configure>", self.resizeCallback)
         self.canvas.bind("<Button-1>",  self.markCellClickCallback)
         self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
+        self.window.bind("<Return>",    self.markFilterNextCallback)
+        self.window.bind("<Right>",     self.markFilterNextCallback)
+        self.window.bind("<Left>",      self.markFilterPrevCallback)
+        self.window.bind("<Escape>",    self.markFilterEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.markFilterEscapeCallback)
+    def setupMarkCoarse(self):
         #load water cells if provided
         if self.fileMarks[self.filenames[self.fileIdx]] != None:
             info = self.fileMarks[self.filenames[self.fileIdx]]
@@ -111,11 +101,14 @@ class Window:
                 for col in range(len(info[0])):
                     if info[row][col] == 1:
                         self.toggleCell(col, row)
-        #set more handlers
-        self.window.bind("<Return>", self.markCoarseNextCallback)
-        self.window.bind("<Right>",  self.markCoarseNextCallback)
-        self.window.bind("<Left>",   self.markCoarsePrevCallback)
-        self.window.bind("<Escape>", self.markCoarseEscapeCallback)
+        #set handlers
+        self.canvas.bind("<Configure>", self.resizeCallback)
+        self.canvas.bind("<Button-1>",  self.markCellClickCallback)
+        self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
+        self.window.bind("<Return>",    self.markCoarseNextCallback)
+        self.window.bind("<Right>",     self.markCoarseNextCallback)
+        self.window.bind("<Left>",      self.markCoarsePrevCallback)
+        self.window.bind("<Escape>",    self.markCoarseEscapeCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markCoarseEscapeCallback)
     def setupMarkDetailed(self):
         #load boxes if present
@@ -123,17 +116,8 @@ class Window:
         if self.fileMarks[filename] != None:
             for box in self.fileMarks[filename]:
                 self.boxCoords.append(box)
-                #convert to scaled image coordinates
-                wscale = self.canvasWidth /IMG_WIDTH
-                hscale = self.canvasHeight/IMG_HEIGHT
-                #add box
                 self.boxIDs.append(
-                    self.canvas.create_rectangle(
-                        int(box[0] * wscale),
-                        int(box[1] * hscale),
-                        int(box[2] * wscale),
-                        int(box[3] * hscale)
-                    )
+                    self.canvas.create_rectangle(box[0], box[1], box[2], box[3])
                 )
         #set handlers
         self.canvas.bind("<Configure>",       self.resizeCallback)
@@ -162,22 +146,17 @@ class Window:
         )
         self.canvas.tag_lower(self.canvasImage) #move image to back
     def markCellClickCallback(self, event):
-        wscale = self.image.size[0]/self.canvasWidth
-        hscale = self.image.size[1]/self.canvasHeight
-        i = int(event.x * wscale) // INPUT_WIDTH
-        j = int(event.y * hscale) // INPUT_HEIGHT
+        i = int(event.x / self.canvasWidth  * IMG_WIDTH)  // CELL_WIDTH
+        j = int(event.y / self.canvasHeight * IMG_HEIGHT) // CELL_HEIGHT
         self.mouseDownCell = [i, j]
         self.toggleCell(i,j)
     def markCellMoveCallback(self, event):
         #do nothing if mouse is outside window
-        if event.x < 0 or event.x > self.canvasWidth-1 \
-            or event.y < 0 or event.y > self.canvasHeight-1:
+        if not 0 <= event.x < self.canvasWidth or not 0 <= event.y < self.canvasHeight:
             return
         #if a new cell was moved to, toggle it
-        wscale = self.image.size[0]/self.canvasWidth
-        hscale = self.image.size[1]/self.canvasHeight
-        i = int(event.x * wscale) // INPUT_WIDTH
-        j = int(event.y * hscale) // INPUT_HEIGHT
+        i = int(event.x / self.canvasWidth  * IMG_WIDTH)  // CELL_WIDTH
+        j = int(event.y / self.canvasHeight * IMG_HEIGHT) // CELL_HEIGHT
         if i != self.mouseDownCell[0] or j != self.mouseDownCell[1]:
             self.mouseDownCell = [i, j]
             self.toggleCell(i,j)
@@ -192,11 +171,7 @@ class Window:
             #load new image
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(self.filenames[self.fileIdx])
-            self.checkImage(self.image, self.filenames[self.fileIdx])
-            self.image = self.image.resize(
-                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                resample=Image.LANCZOS
-            )
+            checkImage(self.image, self.filenames[self.fileIdx])
             self.imageTk = ImageTk.PhotoImage(
                 self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
             )
@@ -235,11 +210,7 @@ class Window:
             #load new image
             self.canvas.delete(self.canvasImage)
             self.image = Image.open(filename)
-            self.checkImage(self.image, self.filenames[self.fileIdx])
-            self.image = self.image.resize(
-                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                resample=Image.LANCZOS
-            )
+            checkImage(self.image, self.filenames[self.fileIdx])
             self.imageTk = ImageTk.PhotoImage(
                 self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
             )
@@ -267,12 +238,12 @@ class Window:
             for filename in self.filenames:
                 image = Image.open(filename)
                 draw = ImageDraw.Draw(image, "RGBA")
-                for i in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                    for j in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                        topLeftX = i * INPUT_WIDTH * IMG_DOWNSCALE
-                        topLeftY = j * INPUT_HEIGHT * IMG_DOWNSCALE
-                        bottomRightX = (i+1) * INPUT_WIDTH  * IMG_DOWNSCALE - 1
-                        bottomRightY = (j+1) * INPUT_HEIGHT * IMG_DOWNSCALE - 1
+                for i in range(IMG_WIDTH//CELL_WIDTH):
+                    for j in range(IMG_HEIGHT//CELL_HEIGHT):
+                        topLeftX = i * CELL_WIDTH
+                        topLeftY = j * CELL_HEIGHT
+                        bottomRightX = (i+1) * CELL_WIDTH - 1
+                        bottomRightY = (j+1) * CELL_HEIGHT - 1
                         #draw grid box
                         draw.rectangle(
                             [topLeftX, topLeftY, bottomRightX, bottomRightY],
@@ -313,12 +284,12 @@ class Window:
                 if info != None:
                     image = Image.open(filename)
                     draw = ImageDraw.Draw(image, "RGBA")
-                    for i in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
-                        for j in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
-                            topLeftX = i * INPUT_WIDTH * IMG_DOWNSCALE
-                            topLeftY = j * INPUT_HEIGHT * IMG_DOWNSCALE
-                            bottomRightX = (i+1) * INPUT_WIDTH  * IMG_DOWNSCALE - 1
-                            bottomRightY = (j+1) * INPUT_HEIGHT * IMG_DOWNSCALE - 1
+                    for i in range(IMG_WIDTH//CELL_WIDTH):
+                        for j in range(IMG_HEIGHT//CELL_HEIGHT):
+                            topLeftX = i * CELL_WIDTH
+                            topLeftY = j * CELL_HEIGHT
+                            bottomRightX = (i+1) * CELL_WIDTH - 1
+                            bottomRightY = (j+1) * CELL_HEIGHT - 1
                             #draw grid box
                             draw.rectangle(
                                 [topLeftX, topLeftY, bottomRightX, bottomRightY],
@@ -374,8 +345,8 @@ class Window:
         self.boxCoords.append([self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]])
     def markDetailedRightClickCallback(self, event):
         #convert click coordinate to non-scaled image coordinates
-        x = int(event.x * IMG_WIDTH/self.canvasWidth)
-        y = int(event.y * IMG_HEIGHT/self.canvasHeight)
+        x = int(event.x / self.canvasWidth * IMG_WIDTH)
+        y = int(event.y / self.canvasHeight * IMG_HEIGHT)
         #find and remove overlapping boxes
         indices = []
         for i in range(len(self.boxCoords)):
@@ -404,25 +375,17 @@ class Window:
             if self.fileMarks[filename] != None:
                 for box in self.fileMarks[filename]:
                     self.boxCoords.append(box)
-                    #convert to scaled image coordinates
-                    wscale = self.canvasWidth /IMG_WIDTH
-                    hscale = self.canvasHeight/IMG_HEIGHT
-                    #add box
                     self.boxIDs.append(
                         self.canvas.create_rectangle(
-                            int(box[0] * wscale),
-                            int(box[1] * hscale),
-                            int(box[2] * wscale),
-                            int(box[3] * hscale)
+                            int(box[0] / IMG_WIDTH  * self.canvasWidth),
+                            int(box[1] / IMG_HEIGHT * self.canvasHeight),
+                            int(box[2] / IMG_WIDTH  * self.canvasWidth),
+                            int(box[3] / IMG_HEIGHT * self.canvasHeight)
                         )
                     )
             #load new image
             self.image = Image.open(self.filenames[self.fileIdx])
-            self.checkImage(self.image, self.filenames[self.fileIdx])
-            self.image = self.image.resize(
-                (IMG_SCALED_WIDTH, IMG_SCALED_HEIGHT),
-                resample=Image.LANCZOS
-            )
+            checkImage(self.image, self.filenames[self.fileIdx])
             self.imageTk = ImageTk.PhotoImage(
                 self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
             )
@@ -467,21 +430,21 @@ class Window:
             self.canvas.delete(self.cells[i][j])
             self.cells[i][j] = None
         else:
-            wscale = self.canvasWidth /self.image.size[0]
-            hscale = self.canvasHeight/self.image.size[1]
+            wscale = self.canvasWidth  / IMG_WIDTH
+            hscale = self.canvasHeight / IMG_HEIGHT
             self.cells[i][j] = self.canvas.create_rectangle(
-                i * INPUT_WIDTH  * wscale,
-                j * INPUT_HEIGHT * hscale,
-                (i + 1) * INPUT_WIDTH  * wscale,
-                (j + 1) * INPUT_HEIGHT * hscale,
+                i * CELL_WIDTH  * wscale,
+                j * CELL_HEIGHT * hscale,
+                (i + 1) * CELL_WIDTH  * wscale,
+                (j + 1) * CELL_HEIGHT * hscale,
                 fill="green",
                 stipple="gray50"
             )
-    def checkImage(self, image, filename):
-        if image.size[0] != IMG_WIDTH or image.size[1] != IMG_HEIGHT:
-            raise Exception("Unexpected size for image \"" + filename + "\"")
-        if IMG_CHANNELS != 3:
-            raise Exception("An IMG_CHANNELS other than 3 has not been implemented")
-        if image.mode != "RGB":
-            raise Exception("Unexpected mode for image \"" + filename + "\"")
 
+def checkImage(image, filename):
+    if image.size[0] != IMG_WIDTH or image.size[1] != IMG_HEIGHT:
+        raise Exception("Unexpected size for image \"" + filename + "\"")
+    if IMG_CHANNELS != 3:
+        raise Exception("An IMG_CHANNELS other than 3 has not been implemented")
+    if image.mode != "RGB":
+        raise Exception("Unexpected mode for image \"" + filename + "\"")
