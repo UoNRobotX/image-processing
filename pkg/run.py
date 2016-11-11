@@ -7,7 +7,6 @@ from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProd
 from .network import createCoarseNetwork, createDetailedNetwork, runNetwork
 
 def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, thresholdGiven):
-    startTime = time.time()
     textOutput = [] if re.search(r"\.txt$", outFile) != None else None
     if textOutput != None and not useCoarseOnly:
         raise Exception("Text output not implemented for detailed network")
@@ -52,6 +51,8 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
         ]
         staticFilteredFlag = -2
         coarseFilteredFlag = -1
+        #start processing
+        startTime = time.time()
         #filter with static filter
         for i in range(IMG_SCALED_HEIGHT//INPUT_HEIGHT):
             for j in range(IMG_SCALED_WIDTH//INPUT_WIDTH):
@@ -68,14 +69,16 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                         results[i][j] = coarseFilteredFlag
             #run detailed network
             runNetwork(detailedNet, imageData, results, reinitialise, DETAILED_SAVE_FILE)
+        #end processing
+        processingTime = time.time() - startTime
         #output results
         if textOutput != None:
             textOutput.append(filenames[fileIdx])
             for row in results:
                 line = ["1" if cell > threshold else "0" for cell in row]
                 textOutput.append(" " + "".join(line))
-            print("%7.2f secs - processed %s " % \
-                (time.time() - startTime, filenames[fileIdx]))
+            print("Processed %s, processing time %.2f secs" % \
+                (filenames[fileIdx], processingTime))
         else:
             #write results to image file
             FILTER_COLOR   = (128, 0, 128, 128)
@@ -105,8 +108,8 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
                         draw.rectangle(rect, fill=FILTER_COLOR)
             #save the image, and print info
             image.save(outputFilenames[fileIdx])
-            print("%7.2f secs - wrote image %s" % \
-                (time.time() - startTime, outputFilenames[fileIdx]))
+            print("Wrote image %s, processing time %.2f secs" % \
+                (outputFilenames[fileIdx], processingTime))
     if textOutput != None:
         #write results to training/testing data file (used to bootstrap training)
         with open(outFile, "w") as file:
