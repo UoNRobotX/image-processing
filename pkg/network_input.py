@@ -123,7 +123,7 @@ class CoarseBatchProducer:
                     ]
                     self.inputs[fileIdx] += data
                     self.outputs[fileIdx] += [
-                        np.array([1, 0]).astype(np.float32) if containsWater else 
+                        np.array([1, 0]).astype(np.float32) if containsWater else
                         np.array([0, 1]).astype(np.float32)
                     ] * len(cellImages)
             if len(self.inputs[fileIdx]) == 0:
@@ -270,7 +270,7 @@ class DetailedBatchProducer:
                     self.inputs[fileIdx] += data
                     #get output
                     self.outputs[fileIdx] += [
-                        np.array([1, 0]).astype(np.float32) if containsBuoy else 
+                        np.array([1, 0]).astype(np.float32) if containsBuoy else
                         np.array([0, 1]).astype(np.float32)
                     ] * len(cellImages)
             if len(self.inputs[fileIdx]) == 0:

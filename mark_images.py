@@ -1,6 +1,6 @@
-import sys, os, argparse
+import sys, os, argparse, re
 
-from pkg import mark_input
+from pkg import mark_loader
 from pkg import mark_window
 
 #process command line arguments
@@ -65,16 +65,29 @@ saveDir    = args.saveDir
 if saveDir != None and not os.path.isdir(saveDir):
     raise Exception("Invalid output save directory")
 
-#read input filenames, and load mark data
+#read input filenames
+fileMarks = dict()
+if inputDir == None:
+    for line in sys.stdin:
+        line = line.strip()
+        if len(line) > 0 and line.find(",") == -1:
+            fileMarks[line] = None
+else:
+    fileMarks = {
+        (inputDir + "/" + name) : None for
+        name in os.listdir(inputDir) if
+        os.path.isfile(inputDir + "/" + name) and re.fullmatch(r".*\.jpg", name)
+    }
+
+#load mark data
 cellFilter = None
-fileMarks = mark_input.getFilenames(inputDir)
 if loadFile != None:
     if mode == "filter":
-        cellFilter = mark_input.loadFilterData(loadFile)
+        cellFilter = mark_loader.loadFilterData(loadFile)
     elif mode == "coarse":
-        fileMarks = mark_input.loadCoarseSet(loadFile, fileMarks)
+        fileMarks = mark_loader.loadCoarseSet(loadFile, fileMarks)
     elif mode == "detailed":
-        fileMarks = mark_input.loadDetailedSet(loadFile, fileMarks)
+        fileMarks = mark_loader.loadDetailedSet(loadFile, fileMarks)
 if len(fileMarks) == 0:
     raise Exception("No input files")
 

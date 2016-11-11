@@ -1,24 +1,4 @@
-import sys, os, re
-
-def getFilenames(inputDir):
-    """ Obtain filenames of images to be marked, from stdin or a directory.
-        Returns a dict that maps each filename to None.
-    """
-    fileMarks = dict()
-    if inputDir == None:
-        #get filenames from standard input
-        for line in sys.stdin:
-            line = line.strip()
-            if len(line) > 0 and line.find(",") == -1:
-                fileMarks[line] = None
-    else:
-        #get filenames from JPG files in the specified directory
-        fileMarks = {
-            (inputDir + "/" + name) : None for
-            name in os.listdir(inputDir) if
-            os.path.isfile(inputDir + "/" + name) and re.fullmatch(r".*\.jpg", name)
-        }
-    return fileMarks
+import os
 
 def loadFilterData(loadFile):
     """ Loads a cell filter from a file.

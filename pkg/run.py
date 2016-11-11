@@ -1,10 +1,11 @@
 import os, time, re
 import numpy as np
 from PIL import Image, ImageDraw
+import tensorflow as tf
 
 from .constants import *
 from .network_input import getCellFilter, CoarseBatchProducer, DetailedBatchProducer
-from .network import createCoarseNetwork, createDetailedNetwork, runNetwork
+from .network import createCoarseNetwork, createDetailedNetwork
 
 def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, thresholdGiven):
     textOutput = [] if re.search(r"\.txt$", outFile) != None else None
@@ -125,3 +126,32 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, t
         with open(outFile, "w") as file:
             for line in textOutput:
                 file.write(line + "\n")
+
+def runNetwork(net, cellData, results, reinitialise, saveFile):
+    """ Run the network on cells of an image, inserting them into 'results'.
+        Only runs on cells where results[i][j] is non-negative.
+    """
+    with tf.Session(graph=net.graph) as sess:
+        #reinitialise or load values
+        if reinitialise or not os.path.exists(saveFile):
+            sess.run(tf.initialize_all_variables())
+        else:
+            tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
+        #get cells
+        cells = []
+        inputs = []
+        for i in range(IMG_HEIGHT//CELL_HEIGHT):
+            for j in range(IMG_WIDTH//CELL_WIDTH):
+                if results[i][j] >= 0:
+                    inputs.append(cellData[i][j])
+                    cells.append([i, j])
+        #run on cells
+        outputs = net.y.eval(feed_dict={
+            net.x: inputs,
+            net.p_dropout: 1.0
+        })
+        #get results
+        for i in range(len(cells)):
+            indices = cells[i]
+            results[indices[0]][indices[1]] = outputs[i][0]
+
