@@ -20,6 +20,8 @@ coarse: (batch size 1000, 500 test steps)
         3000 - 0.93, 0.89, 0.94
     [30, 10], adam, sigmoid, softmax cross entropy with logits, normalize inputs, use edge finder, 
         3000 - 0.93, 0.88, 0.95 //not great
+    [30, 10], adam, sigmoid, squared error, normalize inputs, dropout 0.75
+        3000 - 0.93, 0.86, 0.96
 detailed: (batch size 50, 500 test steps)
     conv (5x5->32, max, 5x5->64, max), dense (64->2), dropout 0.5, cross entropy cost, adam, normalise input
         3000 - 0.91, 0.92, 0.88 //missed buoys are far away, some bad false positives

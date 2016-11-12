@@ -10,8 +10,12 @@ from .network import createCoarseNetwork, createDetailedNetwork
 def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
     #check if outputting text
     textOutput = re.search(r"\.txt$", outFile) != None
-    if textOutput and not useCoarseOnly:
-        raise Exception("Text output not implemented for detailed network")
+    if textOutput:
+        if not useCoarseOnly:
+            raise Exception("Text output not implemented for detailed network")
+        else: #create and truncate file
+            with open(outFile, "w"):
+                pass
     #get input and output filenames
     if os.path.isfile(dataFile):
         filenames = [dataFile]
@@ -24,7 +28,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
         ]
         filenames.sort()
         if textOutput:
-            outputFilenames = [outFile]
+            outputFilenames = [outFile] * len(filenames)
         else:
             outputDir = outFile or dataFile
             if not os.path.exists(outputDir):
@@ -39,19 +43,14 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
     coarseNet = createCoarseNetwork(threshold)
     detailedNet = None if useCoarseOnly else createDetailedNetwork()
     #process images
-    results = []
     for fileIdx in range(len(filenames)):
         filename = filenames[fileIdx]
         if useCoarseOnly:
             result = runCoarse(filename, cellFilter, coarseNet, reinitialise)
+            writeCoarseResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
         else:
             result = runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, threshold)
-        results.append(result)
-    #output results
-    if useCoarseOnly:
-        writeCoarseResults(results, filenames, outputFilenames, textOutput)
-    else:
-        writeDetailedResults(results, filenames, outputFilenames, textOutput)
+            writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput)
 
 def runCoarse(filename, cellFilter, coarseNet, reinitialise):
     startTime = time.time()
@@ -170,72 +169,65 @@ def runNetwork(net, inputs, reinitialise, saveFile):
         })
         return outputs
 
-def writeCoarseResults(results, filenames, outputFilenames, textOutput):
+def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
     POS_COLOR = (0, 255, 0, 96)
     NEG_COLOR = (255, 0, 0, 96)
     if textOutput:
-        #write results to training/testing data file (used to bootstrap training)
-        with open(outputFilenames[0], "w") as file:
-            for fileIdx in len(filenames):
-                file.write(filenames[fileIdx] + "\n")
-                for row in results[fileIdx]:
-                    file.write(" ")
-                    for cell in row:
-                        if cell != None and cell[0] > threshold:
-                            file.write("1")
-                        else:
-                            file.write("0")
-                    file.write("\n")
-    else:
-        for fileIdx in range(len(filenames)):
-            image = Image.open(filenames[fileIdx])
-            draw = ImageDraw.Draw(image, "RGBA")
-            result = results[fileIdx]
-            for i in range(IMG_HEIGHT//CELL_HEIGHT):
-                for j in range(IMG_WIDTH//CELL_WIDTH):
-                    rect = [CELL_WIDTH*j, CELL_HEIGHT*i, CELL_WIDTH*(j+1), CELL_HEIGHT*(i+1)]
-                    #draw a grid cell outline
-                    draw.rectangle(rect, outline=(0,0,0,255))
-                    #draw a rectangle describing the results
-                    output = result[i][j]
-                    if output is None:
-                        draw.rectangle(rect, fill=FILTER_COLOR)
+        #write result to training/testing data file (used to bootstrap training)
+        with open(outputFilename, "a") as file:
+            file.write(filename + "\n")
+            for row in result:
+                file.write(" ")
+                for cell in row:
+                    if cell != None and cell[0] > threshold:
+                        file.write("1")
                     else:
-                        rect1 = rect.copy()
-                        rect1[1] += int(CELL_HEIGHT*(1-output[0]))
-                        rect1[2] -= CELL_WIDTH//2
-                        rect2 = rect.copy()
-                        rect2[0] += CELL_WIDTH//2
-                        rect2[3] -= int(CELL_HEIGHT*(1-output[1]))
-                        draw.rectangle(rect1, fill=POS_COLOR)
-                        draw.rectangle(rect2, fill=NEG_COLOR)
-            #save the image
-            image.save(outputFilenames[fileIdx])
-            print("Wrote %s" % outputFilenames[fileIdx])
+                        file.write("0")
+                file.write("\n")
+    else:
+        image = Image.open(filename)
+        draw = ImageDraw.Draw(image, "RGBA")
+        for i in range(IMG_HEIGHT//CELL_HEIGHT):
+            for j in range(IMG_WIDTH//CELL_WIDTH):
+                rect = [CELL_WIDTH*j, CELL_HEIGHT*i, CELL_WIDTH*(j+1), CELL_HEIGHT*(i+1)]
+                #draw a grid cell outline
+                draw.rectangle(rect, outline=(0,0,0,255))
+                #draw a rectangle describing a cell's result
+                output = result[i][j]
+                if output is None:
+                    draw.rectangle(rect, fill=FILTER_COLOR)
+                else:
+                    rect1 = rect.copy()
+                    rect1[1] += int(CELL_HEIGHT*(1-output[0]))
+                    rect1[2] -= CELL_WIDTH//2
+                    rect2 = rect.copy()
+                    rect2[0] += CELL_WIDTH//2
+                    rect2[3] -= int(CELL_HEIGHT*(1-output[1]))
+                    draw.rectangle(rect1, fill=POS_COLOR)
+                    draw.rectangle(rect2, fill=NEG_COLOR)
+        #save the image
+        image.save(outputFilename)
 
-def writeDetailedResults(results, filenames, outputFilenames, textOutput):
+def writeDetailedResult(result, filename, outputFilename, textOutput):
     FILTER_COLOR = (128, 0, 128, 128)
     COARSE_COLOR = (192, 160, 0, 128)
     POS_COLOR = (0, 255, 0, 96)
     if textOutput:
         raise Exception("Not implemented")
     else:
-        for fileIdx in range(len(filenames)):
-            image = Image.open(filenames[fileIdx])
-            draw = ImageDraw.Draw(image, "RGBA")
-            result = results[fileIdx]
-            cellPositions = result[0]
-            cellResults = result[1]
-            for i in range(len(cellPositions)):
-                if isinstance(cellResults[i], int) and cellResults[i] == -2:
-                    draw.rectangle(cellPositions[i], fill=FILTER_COLOR)
-            for i in range(len(cellPositions)):
-                if isinstance(cellResults[i], int) and cellResults[i] == -1:
-                    draw.rectangle(cellPositions[i], fill=COARSE_COLOR)
-            for i in range(len(cellPositions)):
-                if not isinstance(cellResults[i], int) and cellResults[i][0] > 0.5:
-                    draw.rectangle(cellPositions[i], outline="black", fill=POS_COLOR)
-            #save the image
-            image.save(outputFilenames[fileIdx])
-            print("Wrote %s" % outputFilenames[fileIdx])
+        image = Image.open(filename)
+        draw = ImageDraw.Draw(image, "RGBA")
+        cellPositions = result[0]
+        cellResults = result[1]
+        for i in range(len(cellPositions)):
+            if isinstance(cellResults[i], int) and cellResults[i] == -2:
+                draw.rectangle(cellPositions[i], fill=FILTER_COLOR)
+        for i in range(len(cellPositions)):
+            if isinstance(cellResults[i], int) and cellResults[i] == -1:
+                draw.rectangle(cellPositions[i], fill=COARSE_COLOR)
+        for i in range(len(cellPositions)):
+            if not isinstance(cellResults[i], int) and cellResults[i][0] > 0.5:
+                draw.rectangle(cellPositions[i], outline="black", fill=POS_COLOR)
+        #save the image
+        image.save(outputFilename)
