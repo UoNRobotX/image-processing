@@ -1,4 +1,4 @@
-import sys, os
+import sys, os, random
 from PIL import Image, ImageTk, ImageDraw
 import tkinter
 
@@ -74,6 +74,8 @@ class Window:
                 self.setupMarkCoarse()
         elif mode == "detailed":
             self.setupMarkDetailed()
+        elif mode == "varcells":
+            self.setupShowVarCells()
         #start application
         tkinter.mainloop()
     #setup functions
@@ -130,6 +132,32 @@ class Window:
         self.window.bind("<Left>",            self.markDetailedPrevCallback)
         self.window.bind("<Escape>",          self.markDetailedEscapeCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markDetailedEscapeCallback)
+    def setupShowVarCells(self):
+        if True: #draw many cells
+            cells = GET_VAR_CELLS()
+            colors = ["red", "green", "blue", "yellow", "pink", "brown", "black"]
+            for cellIdx in range(len(cells)):
+                #if random.random() > 0.5: continue #randomly skip
+                #get cell position
+                cell = cells[cellIdx]
+                self.canvas.create_rectangle(
+                    cell[0]+2, cell[1]+2, cell[2], cell[3],
+                    outline=colors[cellIdx % len(colors)], width=2
+                )
+        else: #draw some cells
+            NUM_CELLS = 20
+            for i in range(NUM_CELLS):
+                x = int((i+1) * (IMG_WIDTH / (NUM_CELLS+1)))
+                y = int(VAR_CELL_MAX_Y - i * ((VAR_CELL_MAX_Y-VAR_CELL_MIN_Y) / (NUM_CELLS-1)))
+                cell = GET_VAR_CELL(x, y)
+                self.canvas.create_rectangle(cell[0], cell[1], cell[2], cell[3], outline="red", width=2)
+        #set handlers
+        self.canvas.bind("<Configure>", self.resizeCallback)
+        self.window.bind("<Return>",    self.markFilterNextCallback)
+        self.window.bind("<Right>",     self.markFilterNextCallback)
+        self.window.bind("<Left>",      self.markFilterPrevCallback)
+        self.window.bind("<Escape>",    self.showVarCellsEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.showVarCellsEscapeCallback)
     #callback functions
     def resizeCallback(self, event):
         wscale = event.width /self.canvasWidth
@@ -181,6 +209,41 @@ class Window:
             self.canvas.tag_lower(self.canvasImage) #move image to back
         else:
             self.fileIdx -= 1
+    def markFilterPrevCallback(self, event):
+        self.markFilterNextCallback(None, forward=False)
+    def markFilterEscapeCallback(self, event=None):
+        #output filter info
+        f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
+        for row in range(len(self.cells[0])):
+            for col in range(len(self.cells)):
+                print("0" if self.cells[col][row] == None else "1", end="", file=f)
+            print(file=f)
+        if not f is sys.stdout:
+            f.close()
+        #save images if requested
+        if self.saveDir != None:
+            for filename in self.filenames:
+                image = Image.open(filename)
+                draw = ImageDraw.Draw(image, "RGBA")
+                for i in range(IMG_WIDTH//CELL_WIDTH):
+                    for j in range(IMG_HEIGHT//CELL_HEIGHT):
+                        topLeftX = i * CELL_WIDTH
+                        topLeftY = j * CELL_HEIGHT
+                        bottomRightX = (i+1) * CELL_WIDTH - 1
+                        bottomRightY = (j+1) * CELL_HEIGHT - 1
+                        #draw grid box
+                        draw.rectangle(
+                            [topLeftX, topLeftY, bottomRightX, bottomRightY],
+                            outline=(0,0,0)
+                        )
+                        #draw marking
+                        if self.cells[i][j] != None:
+                            draw.rectangle(
+                                [topLeftX, topLeftY, bottomRightX, bottomRightY],
+                                fill=(0,128,0,128)
+                            )
+                image.save(self.saveDir + "/" + os.path.basename(filename))
+        sys.exit(0)
     def markCoarseNextCallback(self, event, forward=True):
         #store mark info
         self.fileMarks[self.filenames[self.fileIdx]] = [
@@ -220,43 +283,8 @@ class Window:
             self.canvas.tag_lower(self.canvasImage) #move image to back
         else:
             self.fileIdx -= 1
-    def markFilterPrevCallback(self, event):
-        self.markFilterNextCallback(None, forward=False)
     def markCoarsePrevCallback(self, event):
         self.markCoarseNextCallback(None, forward=False)
-    def markFilterEscapeCallback(self, event=None):
-        #output filter info
-        f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
-        for row in range(len(self.cells[0])):
-            for col in range(len(self.cells)):
-                print("0" if self.cells[col][row] == None else "1", end="", file=f)
-            print(file=f)
-        if not f is sys.stdout:
-            f.close()
-        #save images if requested
-        if self.saveDir != None:
-            for filename in self.filenames:
-                image = Image.open(filename)
-                draw = ImageDraw.Draw(image, "RGBA")
-                for i in range(IMG_WIDTH//CELL_WIDTH):
-                    for j in range(IMG_HEIGHT//CELL_HEIGHT):
-                        topLeftX = i * CELL_WIDTH
-                        topLeftY = j * CELL_HEIGHT
-                        bottomRightX = (i+1) * CELL_WIDTH - 1
-                        bottomRightY = (j+1) * CELL_HEIGHT - 1
-                        #draw grid box
-                        draw.rectangle(
-                            [topLeftX, topLeftY, bottomRightX, bottomRightY],
-                            outline=(0,0,0)
-                        )
-                        #draw marking
-                        if self.cells[i][j] != None:
-                            draw.rectangle(
-                                [topLeftX, topLeftY, bottomRightX, bottomRightY],
-                                fill=(0,128,0,128)
-                            )
-                image.save(self.saveDir + "/" + os.path.basename(filename))
-        sys.exit(0)
     def markCoarseEscapeCallback(self, event=None):
         #store info
         if self.fileIdx < len(self.filenames):
@@ -423,6 +451,10 @@ class Window:
                     for box in self.fileMarks[filename]:
                         draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
                     image.save(self.saveDir + "/" + os.path.basename(filename))
+        sys.exit(0)
+    def showVarCellsEscapeCallback(self, event=None):
+        if self.saveDir != None:
+            raise Exception("Saving images is not implemented for varcells")
         sys.exit(0)
     #helper functions
     def toggleCell(self, i, j): #toggle marked-ness of cell i-j

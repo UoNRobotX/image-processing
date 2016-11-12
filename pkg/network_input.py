@@ -151,8 +151,8 @@ class DetailedBatchProducer:
     """Produces input values for the detailed network"""
     #constructor
     def __init__(self, dataFile, cellFilter, outFile):
-        self.inputs          = None
-        self.outputs         = None
+        self.inputs  = None
+        self.outputs = None
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
@@ -190,43 +190,31 @@ class DetailedBatchProducer:
             #get inputs and outputs
             self.inputs[fileIdx] = []
             self.outputs[fileIdx] = []
-            stride = (CELL_WIDTH//1, CELL_HEIGHT//1)
-            numHorizontalSteps = (image.size[0] // stride[0]) - (CELL_WIDTH  // stride[0] - 1)
-            numVerticalSteps   = (image.size[1] // stride[1]) - (CELL_HEIGHT // stride[1] - 1)
-            for i in range(numVerticalSteps):
-                for j in range(numHorizontalSteps):
-                    #get cell position
-                    x = j*stride[0]
-                    y = i*stride[1]
-                    #use static filter
-                    intersectingCols = [x // CELL_WIDTH]
-                    intersectingRows = [y // CELL_HEIGHT]
-                    if x % CELL_WIDTH != 0:
-                        intersectingCols.append(x // CELL_WIDTH + 1)
-                    if y % CELL_HEIGHT != 0:
-                        intersectingRows.append(y // CELL_HEIGHT + 1)
-                    intersectingCells = (
-                        (row, col) for row in intersectingRows for col in intersectingCols
-                    )
-                    hasOverlappingFilteredCell = False
-                    for (row, col) in intersectingCells:
-                        if cellFilter[row][col] == 1:
+            #get cell positions
+            cellPositions = GET_VAR_CELLS()
+            for pos in cellPositions:
+                #get cell position
+                topLeftX = pos[0]
+                topLeftY = pos[1]
+                bottomRightX = pos[2]
+                bottomRightY = pos[3]
+                #use static filter
+                hasOverlappingFilteredCell = False
+                for i in range(topLeftY // CELL_HEIGHT, bottomRightY // CELL_HEIGHT):
+                    for j in range(topLeftX // CELL_WIDTH, bottomRightX // CELL_WIDTH):
+                        if cellFilter[i][j] == 1:
                             hasOverlappingFilteredCell = True
                             break
                     if hasOverlappingFilteredCell:
-                        continue
-                    #get cell image
-                    cellImg = image.crop((x, y, x+CELL_WIDTH, y+CELL_HEIGHT))
-                    #downscale
-                    cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
-                    #determine whether the input should have a positive prediction
-                    topLeftX = x
-                    topLeftY = y
-                    bottomRightX = (x+CELL_WIDTH-1)
-                    bottomRightY = (y+CELL_HEIGHT-1)
-                    containsBuoy = False
-                    for box in boxes[fileIdx]:
-                        f = 0.4 #impose overlap by least this factor, horizontally and vertically
+                        break
+                #get cell image
+                cellImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
+                cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
+                #determine whether the input should have a positive prediction
+                containsBuoy = False
+                for box in boxes[fileIdx]:
+                    if False: #impose overlap by least some factor, horizontally and vertically
+                        f = 0.4
                         boxWidth = box[2]-box[0]
                         boxHeight = box[3]-box[1]
                         if (not box[2] < topLeftX     + boxWidth*f  and
@@ -235,44 +223,51 @@ class DetailedBatchProducer:
                             not box[1] > bottomRightY - boxHeight*f):
                             containsBuoy = True
                             break
-                    #preprocess image
-                    if False: #maximise image contrast
-                        cellImg = ImageOps.autocontrast(cellImg)
-                    if False: #blur image
-                        cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
-                    cellImages = [cellImg]
-                    if True and containsBuoy: #add rotated images
-                        cellImages += [cellImg.rotate(180) for img in cellImages]
-                        cellImages += [cellImg.rotate(90) for img in cellImages]
-                    if True and containsBuoy: #add flipped images
-                        cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
-                    if True and containsBuoy: #add sheared images
-                        for maxShearFactor in [0.1, 0.2]:
-                            shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
-                            cellImages += [
-                                img.transform(
-                                    (img.size[0], img.size[1]),
-                                    Image.AFFINE,
-                                    data=(
-                                        (1-shearFactor, shearFactor, 0, 0, 1, 0) if shearFactor>0 else
-                                        (1+shearFactor, shearFactor, -shearFactor*img.size[0], 0, 1, 0)
-                                    ),
-                                    resample=Image.BICUBIC)
-                                for img in cellImages
-                            ]
-                    #get input
-                    data = [
-                        np.array(list(img.getdata())).astype(np.float32).reshape(
-                            (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
-                        )
-                        for img in cellImages
-                    ]
-                    self.inputs[fileIdx] += data
-                    #get output
-                    self.outputs[fileIdx] += [
-                        np.array([1, 0]).astype(np.float32) if containsBuoy else
-                        np.array([0, 1]).astype(np.float32)
-                    ] * len(cellImages)
+                    else: #only accept if a buoy is fully contained
+                        if (box[0] >= topLeftX and
+                            box[1] >= topLeftY and
+                            box[2] <= bottomRightX and
+                            box[3] <= bottomRightY):
+                            containsBuoy = True
+                            break
+                #preprocess image
+                if False: #maximise image contrast
+                    cellImg = ImageOps.autocontrast(cellImg)
+                if False: #blur image
+                    cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
+                cellImages = [cellImg]
+                if True and containsBuoy: #add rotated images
+                    cellImages += [cellImg.rotate(180) for img in cellImages]
+                    cellImages += [cellImg.rotate(90) for img in cellImages]
+                if True and containsBuoy: #add flipped images
+                    cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
+                if True and containsBuoy: #add sheared images
+                    for maxShearFactor in [0.1, 0.2]:
+                        shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
+                        cellImages += [
+                            img.transform(
+                                (img.size[0], img.size[1]),
+                                Image.AFFINE,
+                                data=(
+                                    (1-shearFactor, shearFactor, 0, 0, 1, 0) if shearFactor>0 else
+                                    (1+shearFactor, shearFactor, -shearFactor*img.size[0], 0, 1, 0)
+                                ),
+                                resample=Image.BICUBIC)
+                            for img in cellImages
+                        ]
+                #get input
+                data = [
+                    np.array(list(img.getdata())).astype(np.float32).reshape(
+                        (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
+                    )
+                    for img in cellImages
+                ]
+                self.inputs[fileIdx] += data
+                #get output
+                self.outputs[fileIdx] += [
+                    np.array([1, 0]).astype(np.float32) if containsBuoy else
+                    np.array([0, 1]).astype(np.float32)
+                ] * len(cellImages)
             if len(self.inputs[fileIdx]) == 0:
                 raise Exception("No unfiltered cells for \"" + filenames[fileIdx] + "\"")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs

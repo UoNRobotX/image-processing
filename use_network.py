@@ -54,11 +54,10 @@ parser.add_argument("-o", dest="outFile", \
         When running, specifying a .txt file causes the output to resemble training data.\
         When running, specifying a directory causes .jpg files in it to be used \
         (by default, output is written to same-name files).")
-parser.add_argument("-t", dest="threshold", type=float, \
+parser.add_argument("-t", dest="threshold", type=float, default=0.5, \
     help="Affects the precision-recall tradeoff.\
-        If operating on the coarse network, positive predictions will be those above this value.\
-        The default is 0.5.\
-        If running on input images, causes positive prediction cells to be fully colored.")
+        If using the coarse network, its positive predictions will be those above this value.\
+        The default is 0.5.")
 
 args = parser.parse_args()
 if args.mode == "train" and args.file2 == None or args.mode != "train" and args.file3 != None:
@@ -73,8 +72,7 @@ useCoarseOnly  = args.useCoarseOnly
 reinitialise   = args.reinitialise
 numSteps       = args.numSteps
 outFile        = args.outFile
-threshold      = args.threshold or 0.5
-thresholdGiven = args.threshold != None
+threshold      = args.threshold
 
 #check variables
 if numSteps <= 0:
@@ -88,6 +86,6 @@ if mode == "train":
 elif mode == "test":
     test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, threshold)
 elif mode == "run":
-    run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold, thresholdGiven)
+    run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold)
 elif mode == "samples":
     genSamples(dataFile, filterFile, useCoarseOnly, outFile, threshold)
