@@ -83,10 +83,9 @@ def createCoarseNetwork(graph, threshold):
             #cost
             with tf.name_scope("cost"):
                 if COST_FUNC == "squared_error":
-                    cost = tf.reduce_mean(tf.square(y_ - y), 1)
+                    cost = tf.square(y_ - y)
                 elif COST_FUNC == "logistic_loss":
                     cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y_))
-                    cost = tf.reduce_mean(cost, 1)
                 elif COST_FUNC == "softmax_cross_entropy_with_logits":
                     cost = tf.nn.softmax_cross_entropy_with_logits(y, y_)
                 else:
@@ -210,10 +209,7 @@ def createDetailedNetwork(graph):
                 y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
             #cost
             with tf.name_scope("cost"):
-                cost = tf.reduce_mean(
-                    -tf.reduce_sum(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)),
-                    reduction_indices=[1])
-                )
+                cost = -(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)))
                 addSummaries(cost, summaries, "cost", "mean")
             #optimizer
             with tf.name_scope("train"):

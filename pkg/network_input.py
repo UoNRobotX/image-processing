@@ -99,7 +99,7 @@ class CoarseBatchProducer:
                     if False: #add rotated images
                         cellImages += [cellImg.rotate(180) for img in cellImages]
                         cellImages += [cellImg.rotate(90) for img in cellImages]
-                    if False and containsWater: #add flip images
+                    if True and not containsWater: #add flipped images
                         cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
                     if False: #add sheared images
                         shearFactor = random.random()*0.8 - 0.4
@@ -236,7 +236,7 @@ class DetailedBatchProducer:
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 cellImages = [cellImg]
-                if False and containsBuoy: #add rotated images
+                if True and containsBuoy: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
                 if False and containsBuoy: #add flipped images
