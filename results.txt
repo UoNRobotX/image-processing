@@ -43,4 +43,47 @@ detailed: (batch size 50, 500 test steps)
         3000 - 0.91, 0.90, 0.90
     conv (5x5->16, max, 5x5->32, max), dense (64->2), dropout 0.9, cross entropy cost, adam, normalise input
         3000 - 0.92, 0.91, 0.91
-        //current
+    modified training/validation/testing set:
+        conv (5x5->16, max, 5x5->32, max), dense (64->2), dropout 0.9, cross entropy cost, adam, normalise input
+            32x32 static cell size:
+                partial buoy containment:
+                    3000 - 0.92, 0.97, 0.89
+                    6000 - 0.91, 0.97, 0.87
+                    10000 - 0.90, 0.97, 0.85
+                full buoy containment:
+                    3000 - 0.94, 0.91, 0.88
+                    6000 - 0.94, 0.96, 0.81
+            variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                partial buoy containment:
+                    3000 - 0.95, 0.95, 0.98
+                    6000 - 0.94, 0.98, 0.94
+            reduced ratio of positive samples (to about 0.35):
+                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                    partial buoy containment:
+                        3000 - 0.94, 0.93, 0.93
+            reduced ratio of positive samples (to about 0.25):
+                32x32 static cell size:
+                    partial buoy containment:
+                        3000 - 0.92, 0.98, 0.71
+                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                    partial buoy containment:
+                        3000 - 0.96, 0.94, 0.91
+            use ~0.25 rps (rotate and flip only), then train with ~0.08 rps (nothing):
+                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                    32x32 static cell size:
+                        3000, 3000 - 0.97, 0.66, 0.54
+                    partial buoy containment:
+                        3000, 3000 - 0.97, 0.81, 0.83
+                        3000, 6000 - 0.97, 0.89, 0.75 //ok
+                        //current
+    second modified training/validation/testing set:
+        conv (5x5->16, max, 5x5->32, max), dense (64->2), dropout 0.9, cross entropy cost, adam, normalise input
+            reduced ratio of positive samples (to about 0.3):
+                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                    partial buoy containment:
+                        3000 - 0.94, 0.98, 0.83 //ok-ish
+            use ~0.3 rps (rotate and flip only), then train with ~0.06 rps (nothing):
+                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
+                    partial buoy containment:
+                        3000, 3000 - 0.98, 0.78, 0.69 //ok
+                        3000, 6000 - 0.98, 0.79, 0.71 //ok

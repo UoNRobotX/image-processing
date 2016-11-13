@@ -213,7 +213,7 @@ class DetailedBatchProducer:
                 #determine whether the input should have a positive prediction
                 containsBuoy = False
                 for box in boxes[fileIdx]:
-                    if False: #impose overlap by least some factor, horizontally and vertically
+                    if True: #impose overlap by least some factor, horizontally and vertically
                         f = 0.4
                         boxWidth = box[2]-box[0]
                         boxHeight = box[3]-box[1]
@@ -236,12 +236,12 @@ class DetailedBatchProducer:
                 if False: #blur image
                     cellImg = cellImg.filter(ImageFilter.GaussianBlur(1))
                 cellImages = [cellImg]
-                if True and containsBuoy: #add rotated images
+                if False and containsBuoy: #add rotated images
                     cellImages += [cellImg.rotate(180) for img in cellImages]
                     cellImages += [cellImg.rotate(90) for img in cellImages]
-                if True and containsBuoy: #add flipped images
+                if False and containsBuoy: #add flipped images
                     cellImages += [cellImg.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImages]
-                if True and containsBuoy: #add sheared images
+                if False and containsBuoy: #add sheared images
                     for maxShearFactor in [0.1, 0.2]:
                         shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
                         cellImages += [

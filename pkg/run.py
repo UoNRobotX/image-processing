@@ -68,7 +68,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
                 writeCoarseResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
             else:
                 result = runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold)
-                writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput)
+                writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
 
 def runCoarse(filename, cellFilter, coarseNet):
     startTime = time.time()
@@ -150,7 +150,7 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
             (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
         ) for cellImg in cellImgs
     ]
-    if True: #use coarse network
+    if False: #use coarse network
         outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
         #remove filtered cells
         unfiltered = []
@@ -213,7 +213,7 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
         #save the image
         image.save(outputFilename)
 
-def writeDetailedResult(result, filename, outputFilename, textOutput):
+def writeDetailedResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
     COARSE_COLOR = (192, 160, 0, 128)
     POS_COLOR = (0, 255, 0, 96)
@@ -231,7 +231,11 @@ def writeDetailedResult(result, filename, outputFilename, textOutput):
             if isinstance(cellResults[i], int) and cellResults[i] == -1:
                 draw.rectangle(cellPositions[i], fill=COARSE_COLOR)
         for i in range(len(cellPositions)):
-            if not isinstance(cellResults[i], int) and cellResults[i][0] > 0.5:
-                draw.rectangle(cellPositions[i], outline="black", fill=POS_COLOR)
+            if not isinstance(cellResults[i], int) and cellResults[i][0] > threshold:
+                rect = list(cellPositions[i])
+                draw.rectangle(rect, outline="black")
+                if False: #indicate confidence
+                    rect[1] += int(CELL_HEIGHT*(1-cellResults[i][0]))
+                draw.rectangle(rect, fill=POS_COLOR)
         #save the image
         image.save(outputFilename)

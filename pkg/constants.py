@@ -14,15 +14,15 @@ DETAILED_SAVE_FILE = "model_detailed/model.ckpt"
 COARSE_SUMMARIES   = "summaries_coarse" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES = "summaries_detailed"
 
-VAR_CELL_MIN_Y  = 400
+VAR_CELL_MIN_Y  = 450
 VAR_CELL_MAX_Y  = 700
-VAR_CELL_STEP_X = 1
-VAR_CELL_STEP_Y = 1
+VAR_CELL_STEP_X = 1/2
+VAR_CELL_STEP_Y = 1/2
 
 def GET_VAR_CELL(x, y):
     if 0 <= x < IMG_WIDTH and VAR_CELL_MIN_Y <= y <= VAR_CELL_MAX_Y:
-        width = 32
-        #width = ((y-400)*(175/(300)) + 15) / 2
+        #width = 32
+        width = ((y-400)*(175/(300)) + 15) / 2
         #width = ((y-400)*(y-400)*(200/(300*300)) + 25) / 2
         return (int(x-width), int(y-width), int(x+width), int(y+width))
     else:
