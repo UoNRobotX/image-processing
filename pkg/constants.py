@@ -14,8 +14,8 @@ DETAILED_SAVE_FILE = "model_detailed/model.ckpt"
 COARSE_SUMMARIES   = "summaries_coarse" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES = "summaries_detailed"
 
-VAR_CELL_MIN_Y  = 440
-VAR_CELL_MAX_Y  = 650
+VAR_CELL_MIN_Y  = 400
+VAR_CELL_MAX_Y  = 700
 VAR_CELL_STEP_X = 1
 VAR_CELL_STEP_Y = 1
 

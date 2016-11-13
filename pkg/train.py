@@ -13,14 +13,14 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
     startTime = time.time()
     cellFilter = getCellFilter(filterFile)
     if useCoarseOnly: #train coarse network
-        net = createCoarseNetwork(threshold)
+        net = createCoarseNetwork(tf.Graph(), threshold)
         prod = CoarseBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
         testProd = CoarseBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
         summaryDir = COARSE_SUMMARIES + "/train"
         testSummaryDir = COARSE_SUMMARIES + "/validate"
         saveFile = COARSE_SAVE_FILE
     else: #train detailed network
-        net = createDetailedNetwork()
+        net = createDetailedNetwork(tf.Graph())
         prod = DetailedBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
         testProd = DetailedBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
         summaryDir = DETAILED_SUMMARIES + "/train"

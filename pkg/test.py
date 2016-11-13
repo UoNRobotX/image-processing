@@ -12,12 +12,12 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
     startTime = time.time()
     cellFilter = getCellFilter(filterFile)
     if useCoarseOnly: #test coarse network
-        net = createCoarseNetwork(threshold)
+        net = createCoarseNetwork(tf.Graph(), threshold)
         prod = CoarseBatchProducer(dataFile, cellFilter, outFile)
         summaryDir = COARSE_SUMMARIES + "/test"
         saveFile = COARSE_SAVE_FILE
     else: #test detailed network
-        net = createDetailedNetwork()
+        net = createDetailedNetwork(tf.Graph())
         prod = DetailedBatchProducer(dataFile, cellFilter, outFile)
         summaryDir = DETAILED_SUMMARIES + "/test"
         saveFile = DETAILED_SAVE_FILE

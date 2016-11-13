@@ -39,20 +39,38 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
     else:
         raise Exception("Invalid input file")
     #initialise
+    graph = tf.Graph()
     cellFilter = getCellFilter(filterFile)
-    coarseNet = createCoarseNetwork(threshold)
-    detailedNet = None if useCoarseOnly else createDetailedNetwork()
-    #process images
-    for fileIdx in range(len(filenames)):
-        filename = filenames[fileIdx]
+    coarseNet = createCoarseNetwork(graph, threshold)
+    detailedNet = None if useCoarseOnly else createDetailedNetwork(graph)
+    with tf.Session(graph=graph) as sess:
+        #reinitialise or load values
+        sess.run(tf.initialize_all_variables())
         if useCoarseOnly:
-            result = runCoarse(filename, cellFilter, coarseNet, reinitialise)
-            writeCoarseResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
+            if not reinitialise and os.path.exists(COARSE_SAVE_FILE):
+                tf.train.Saver(
+                    tf.get_collection(tf.GraphKeys.VARIABLES, scope="coarse_net")
+                ).restore(sess, COARSE_SAVE_FILE)
         else:
-            result = runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, threshold)
-            writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput)
+            if os.path.exists(COARSE_SAVE_FILE):
+                tf.train.Saver(
+                    tf.get_collection(tf.GraphKeys.VARIABLES, scope="coarse_net")
+                ).restore(sess, COARSE_SAVE_FILE)
+            if not reinitialise and os.path.exists(DETAILED_SAVE_FILE):
+                tf.train.Saver(
+                    tf.get_collection(tf.GraphKeys.VARIABLES, scope="detailed_net")
+                ).restore(sess, DETAILED_SAVE_FILE)
+        #process images
+        for fileIdx in range(len(filenames)):
+            filename = filenames[fileIdx]
+            if useCoarseOnly:
+                result = runCoarse(filename, cellFilter, coarseNet)
+                writeCoarseResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
+            else:
+                result = runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold)
+                writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput)
 
-def runCoarse(filename, cellFilter, coarseNet, reinitialise):
+def runCoarse(filename, cellFilter, coarseNet):
     startTime = time.time()
     #allocate results
     result = [
@@ -83,7 +101,7 @@ def runCoarse(filename, cellFilter, coarseNet, reinitialise):
     ]
     preProcessingTime = time.time() - startTime
     #use network
-    outputs = runNetwork(coarseNet, inputs, reinitialise, COARSE_SAVE_FILE)
+    outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
     for i in range(len(outputs)):
         result[cellIndices[i][0]][cellIndices[i][1]] = outputs[i]
     processingTime = time.time() - startTime - preProcessingTime
@@ -93,7 +111,7 @@ def runCoarse(filename, cellFilter, coarseNet, reinitialise):
     #return results
     return result
 
-def runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, threshold):
+def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
     startTime = time.time()
     #obtain PIL image
     image = Image.open(filename)
@@ -132,8 +150,8 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, thre
             (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
         ) for cellImg in cellImgs
     ]
-    if False: #use coarse network
-        outputs = runNetwork(coarseNet, inputs, False, COARSE_SAVE_FILE)
+    if True: #use coarse network
+        outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
         #remove filtered cells
         unfiltered = []
         for i in range(len(outputs)):
@@ -145,7 +163,7 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, thre
         cellImgIndices = [cellImgIndices[i] for i in unfiltered]
     preProcessingTime = time.time() - startTime
     #use detailed network
-    outputs = runNetwork(detailedNet, inputs, reinitialise, DETAILED_SAVE_FILE)
+    outputs = detailedNet.y.eval(feed_dict={detailedNet.x: inputs, detailedNet.p_dropout: 1.0})
     for i in range(len(outputs)):
         cellResults[cellImgIndices[i]] = outputs[i]
     processingTime = time.time() - startTime - preProcessingTime
@@ -154,20 +172,6 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, reinitialise, thre
         (filename, preProcessingTime, processingTime))
     #return results
     return (cellPositions, cellResults)
-
-def runNetwork(net, inputs, reinitialise, saveFile):
-    with tf.Session(graph=net.graph) as sess:
-        #reinitialise or load values
-        if reinitialise or not os.path.exists(saveFile):
-            sess.run(tf.initialize_all_variables())
-        else:
-            tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
-        #run
-        outputs = net.y.eval(feed_dict={
-            net.x: inputs,
-            net.p_dropout: 1.0
-        })
-        return outputs
 
 def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
@@ -180,7 +184,7 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
             for row in result:
                 file.write(" ")
                 for cell in row:
-                    if cell != None and cell[0] > threshold:
+                    if cell is not None and cell[0] > threshold:
                         file.write("1")
                     else:
                         file.write("0")
