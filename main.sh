@@ -5,7 +5,7 @@ set -e
 USAGE="Usage:
     $0 generate
     $0 mark filter|coarse|detailed [keep]
-    $0 view filter|coarse|detailed|varcells
+    $0 view filter|coarse|detailed|windows
     $0 train coarse|detailed
     $0 test coarse|detailed
     $0 run coarse|detailed
@@ -77,8 +77,8 @@ case "$CMD" in
             "detailed")
                 python3 mark_images.py detailed -d images -l <(cat data_detailed_*.txt) >/dev/null
             ;;
-            "varcells")
-                python3 mark_images.py varcells -d images
+            "windows")
+                python3 mark_images.py windows -d images
             ;;
             *)
                 echo "$USAGE"

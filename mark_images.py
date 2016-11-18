@@ -35,7 +35,7 @@ description = """
                 Each section starts with a line containing the image filename.
                 Each such line is followed by indented lines.
                     " 1,2,3,4" specifies a box with top-left 1,2 and bottom-right 3,4.
-        varcells
+        windows
             Just display some windows of the image that the networks would be run on.
             No output is written.
 """
@@ -43,7 +43,7 @@ parser = argparse.ArgumentParser(
     description=description,
     formatter_class=argparse.RawDescriptionHelpFormatter
 )
-parser.add_argument("mode", choices=["filter", "coarse", "detailed", "varcells"])
+parser.add_argument("mode", choices=["filter", "coarse", "detailed", "windows"])
 parser.add_argument("-d", dest="inputDir", \
     help="Use JPG files in a directory as the image list.")
 parser.add_argument("-o", dest="outputFile", \

@@ -83,7 +83,7 @@ detailed: (batch size 50, 500 test steps)
                         3000, 3000 - 0.94, 0.86, 0.92 //ok
             sliding window, 32x32, 0.4 to 0.7, 1/2 and 1/2, [1.0, 2.0, 3.0]
                 rps ~0.25 (rskip 0.1), then ~0.1 (rskip 0.3), then ~0.04 rps (rskip 0.3, no rotate)
-                running time is about 0.5 secs per image //now 1.7 for some reason
+                running time is about 1.7 secs per image
                 3000             - 0.96, 0.95, 0.82
                 3000, 3000       - 0.98, 0.86, 0.73
                 3000, 3000, 3000 - 0.99, 0.49, 0.44 //ok

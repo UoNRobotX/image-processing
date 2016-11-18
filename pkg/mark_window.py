@@ -74,8 +74,8 @@ class Window:
                 self.setupMarkCoarse()
         elif mode == "detailed":
             self.setupMarkDetailed()
-        elif mode == "varcells":
-            self.setupShowVarCells()
+        elif mode == "windows":
+            self.setupShowWindows()
         #start application
         tkinter.mainloop()
     #setup functions
@@ -132,12 +132,12 @@ class Window:
         self.window.bind("<Left>",            self.markDetailedPrevCallback)
         self.window.bind("<Escape>",          self.markDetailedEscapeCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markDetailedEscapeCallback)
-    def setupShowVarCells(self):
+    def setupShowWindows(self):
         colors = ["red", "green", "blue", "yellow", "pink", "brown", "black"]
-        if False: #draw many cells
+        if True: #draw many cells
             cells = GET_WINDOWS()
             for i in range(len(cells)):
-                #if random.random() > 0.5: continue #randomly skip
+                #if random.random() > 0.05: continue #randomly skip
                 #get cell position
                 cell = cells[i]
                 self.canvas.create_rectangle(
@@ -167,8 +167,8 @@ class Window:
         self.window.bind("<Return>",    self.markFilterNextCallback)
         self.window.bind("<Right>",     self.markFilterNextCallback)
         self.window.bind("<Left>",      self.markFilterPrevCallback)
-        self.window.bind("<Escape>",    self.showVarCellsEscapeCallback)
-        self.window.protocol("WM_DELETE_WINDOW", self.showVarCellsEscapeCallback)
+        self.window.bind("<Escape>",    self.showWindowsEscapeCallback)
+        self.window.protocol("WM_DELETE_WINDOW", self.showWindowsEscapeCallback)
     #callback functions
     def resizeCallback(self, event):
         wscale = event.width /self.canvasWidth
@@ -463,9 +463,9 @@ class Window:
                         draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
                     image.save(self.saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
-    def showVarCellsEscapeCallback(self, event=None):
+    def showWindowsEscapeCallback(self, event=None):
         if self.saveDir != None:
-            raise Exception("Saving images is not implemented for varcells")
+            raise Exception("Saving images is not implemented")
         sys.exit(0)
     #helper functions
     def toggleCell(self, i, j): #toggle marked-ness of cell i-j
