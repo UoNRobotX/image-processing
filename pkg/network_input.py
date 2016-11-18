@@ -217,7 +217,7 @@ class DetailedBatchProducer:
                             containsBuoy = True
                             break
                 #randomly skip
-                if not containsBuoy and random.random() > 0.3:
+                if not containsBuoy and random.random() > 0.1:
                     continue
                 #get window image
                 winImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))

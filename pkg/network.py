@@ -19,10 +19,6 @@ class Network:
 
 def createCoarseNetwork(graph, threshold):
     #parameters for network variations
-    WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
-    BIASES_INIT = 1.0
-    PREPROCESS_GRAY = False
-    PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
     ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     OUTPUT_ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
@@ -34,10 +30,10 @@ def createCoarseNetwork(graph, threshold):
     def createLayer(input, inSize, outSize, layerName, summaries, activation=ACTIVATION_FUNC):
         with tf.name_scope(layerName):
             with tf.name_scope("weights"):
-                w = tf.Variable(WEIGHTS_INIT([inSize, outSize]))
+                w = tf.Variable(tf.truncated_normal([inSize, outSize]))
                 addSummaries(w, summaries, layerName + "/weights", "mean_stddev_hist")
             with tf.name_scope("biases"):
-                b = tf.Variable(tf.constant(BIASES_INIT, shape=[outSize]))
+                b = tf.Variable(tf.constant(1.0, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
             wb = tf.matmul(input, w) + b
             if USE_DROPOUT:
@@ -47,31 +43,21 @@ def createCoarseNetwork(graph, threshold):
     summaries = []
     with graph.as_default():
         with tf.name_scope("coarse_net"):
-            inputChannels = IMG_CHANNELS
             #input nodes
             with tf.name_scope("input"):
                 x = tf.placeholder(tf.float32, \
-                    [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
+                    [None, INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS], name="x_input")
                 y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
                 p_dropout = tf.placeholder(tf.float32, name="p_dropout")
             with tf.name_scope("process_input"):
-                if PREPROCESS_GRAY:
-                    x2 = tf.image.rgb_to_grayscale(x)
-                    inputChannels = 1
-                    if PREPROCESS_NORMALIZE:
-                        x2 = tf.div(x2, tf.constant(255.0))
-                elif PREPROCESS_HSV:
-                    x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
-                    x2 = tf.image.rgb_to_hsv(x2)
+                if PREPROCESS_NORMALIZE:
+                    x2 = tf.div(x, tf.constant(255.0))
                 else:
-                    if PREPROCESS_NORMALIZE:
-                        x2 = tf.div(x, tf.constant(255.0))
-                    else:
-                        x2 = x
-                x_flat = tf.reshape(x2, [-1, INPUT_HEIGHT*INPUT_WIDTH*inputChannels])
+                    x2 = x
+                x_flat = tf.reshape(x2, [-1, INPUT_HEIGHT*INPUT_WIDTH*IMG_CHANNELS])
                 addSummaries(x2, summaries, "input", "image")
             #hidden and output layers
-            layerSizes = [INPUT_HEIGHT*INPUT_WIDTH*inputChannels] + HIDDEN_LAYERS
+            layerSizes = [INPUT_HEIGHT*INPUT_WIDTH*IMG_CHANNELS] + HIDDEN_LAYERS
             layer = x_flat
             for i in range(1,len(layerSizes)):
                 layer = createLayer(
@@ -141,10 +127,6 @@ def createCoarseNetwork(graph, threshold):
 
 def createDetailedNetwork(graph):
     #parameters for network variations
-    WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
-    BIASES_INIT = 1.0
-    PREPROCESS_GRAY = False
-    PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
     CONV_LAYERS = [16, 32]
     CONV_STRIDE = 1
@@ -154,10 +136,10 @@ def createDetailedNetwork(graph):
     #helper functions
     def createWeights(shape):
         with tf.name_scope("weights"):
-            return tf.Variable(WEIGHTS_INIT(shape, stddev=0.1))
+            return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
     def createBiases(shape):
         with tf.name_scope("biases"):
-            return tf.Variable(tf.constant(BIASES_INIT, shape=shape))
+            return tf.Variable(tf.constant(1.0, shape=shape))
     def createConv(x, w, b):
         with tf.name_scope("conv"):
             xw = tf.nn.conv2d(x, w, strides=[1, CONV_STRIDE, CONV_STRIDE, 1], padding="SAME")
@@ -170,30 +152,20 @@ def createDetailedNetwork(graph):
     summaries = []
     with graph.as_default():
         with tf.name_scope("detailed_net"):
-            inputChannels = IMG_CHANNELS
             #input nodes
             with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
                 x = tf.placeholder(tf.float32, \
-                    [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
+                    [None, INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS], name="x_input")
                 y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
                 p_dropout = tf.placeholder(tf.float32, name="p_dropout")
             with tf.name_scope("process_input"):
-                if PREPROCESS_GRAY:
-                    x2 = tf.image.rgb_to_grayscale(x)
-                    inputChannels = 1
-                    if PREPROCESS_NORMALIZE:
-                        x2 = tf.div(x2, tf.constant(255.0))
-                elif PREPROCESS_HSV:
-                    x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
-                    x2 = tf.image.rgb_to_hsv(x2)
+                if PREPROCESS_NORMALIZE:
+                    x2 = tf.div(x, tf.constant(255.0))
                 else:
-                    if PREPROCESS_NORMALIZE:
-                        x2 = tf.div(x, tf.constant(255.0))
-                    else:
-                        x2 = x
+                    x2 = x
                 addSummaries(x2, summaries, "input", "image")
             #convolutional layers
-            convSizes = [inputChannels] + CONV_LAYERS
+            convSizes = [IMG_CHANNELS] + CONV_LAYERS
             input = x2
             for i in range(1, len(convSizes)):
                 with tf.name_scope("conv_layer" + str(i)):
