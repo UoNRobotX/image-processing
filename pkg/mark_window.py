@@ -133,24 +133,35 @@ class Window:
         self.window.bind("<Escape>",          self.markDetailedEscapeCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markDetailedEscapeCallback)
     def setupShowVarCells(self):
-        if True: #draw many cells
-            cells = GET_VAR_CELLS()
-            colors = ["red", "green", "blue", "yellow", "pink", "brown", "black"]
-            for cellIdx in range(len(cells)):
+        colors = ["red", "green", "blue", "yellow", "pink", "brown", "black"]
+        if False: #draw many cells
+            cells = GET_WINDOWS()
+            for i in range(len(cells)):
                 #if random.random() > 0.5: continue #randomly skip
                 #get cell position
-                cell = cells[cellIdx]
+                cell = cells[i]
                 self.canvas.create_rectangle(
                     cell[0]+2, cell[1]+2, cell[2], cell[3],
-                    outline=colors[cellIdx % len(colors)], width=2
+                    outline=colors[i % len(colors)], width=2
                 )
         else: #draw some cells
-            NUM_CELLS = 20
-            for i in range(NUM_CELLS):
-                x = int((i+1) * (IMG_WIDTH / (NUM_CELLS+1)))
-                y = int(VAR_CELL_MAX_Y - i * ((VAR_CELL_MAX_Y-VAR_CELL_MIN_Y) / (NUM_CELLS-1)))
-                cell = GET_VAR_CELL(x, y)
-                self.canvas.create_rectangle(cell[0], cell[1], cell[2], cell[3], outline="red", width=2)
+            for i in range(len(WINDOW_SCALES)):
+                scale = WINDOW_SCALES[i]
+                cellHeight = int(INPUT_HEIGHT * scale)
+                cellWidth  = int(INPUT_WIDTH * scale)
+                x = int(i * IMG_WIDTH / len(WINDOW_SCALES))
+                cell = [x, WINDOW_MAX_Y - cellHeight, x + cellWidth, WINDOW_MAX_Y]
+                while True:
+                    self.canvas.create_rectangle(
+                        cell[0], cell[1], cell[2], cell[3], outline=colors[i], width=2
+                    )
+                    #move right and up
+                    cell[0] += int(cellWidth * WINDOW_STEP_X)
+                    cell[2] += int(cellWidth * WINDOW_STEP_X)
+                    cell[1] -= int(cellHeight * WINDOW_STEP_Y)
+                    cell[3] -= int(cellHeight * WINDOW_STEP_Y)
+                    if cell[2] > IMG_WIDTH or cell[1] < WINDOW_MIN_Y:
+                        break
         #set handlers
         self.canvas.bind("<Configure>", self.resizeCallback)
         self.window.bind("<Return>",    self.markFilterNextCallback)

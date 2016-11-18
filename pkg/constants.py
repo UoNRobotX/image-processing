@@ -1,63 +1,55 @@
-IMG_HEIGHT   = 960
 IMG_WIDTH    = 1280
+IMG_HEIGHT   = 960
 IMG_CHANNELS = 3
 
+CELL_WIDTH  = 64 #used when marking filtered/water cells
 CELL_HEIGHT = 64
-CELL_WIDTH  = 64
 
-INPUT_HEIGHT = CELL_HEIGHT // 2
-INPUT_WIDTH  = CELL_WIDTH // 2
-BATCH_SIZE   = 50 #the number of inputs per training/testing step
+INPUT_WIDTH  = 32
+INPUT_HEIGHT = 32
+COARSE_BATCH_SIZE = 1000 #the number of inputs per training/testing step
+DETAILED_BATCH_SIZE = 50
 
-COARSE_SAVE_FILE   = "model_coarse/model.ckpt"   #save/load network values to/from here
+TRAIN_DROPOUT = 0.9 #1.0 means no dropout
+COARSE_SAVE_FILE   = "model_coarse/model.ckpt" #save/load network values to/from here
 DETAILED_SAVE_FILE = "model_detailed/model.ckpt"
 COARSE_SUMMARIES   = "summaries_coarse" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES = "summaries_detailed"
 
-VAR_CELL_MIN = 0.46
-VAR_CELL_MAX = 0.73
-VAR_CELL_MIN_Y  = int(VAR_CELL_MIN * IMG_HEIGHT)
-VAR_CELL_MAX_Y  = int(VAR_CELL_MAX * IMG_HEIGHT)
-VAR_CELL_STEP_X = 1/2
-VAR_CELL_STEP_Y = 1/2
+WINDOW_MIN = 0.4
+WINDOW_MAX = 0.7
+WINDOW_MIN_Y  = int(WINDOW_MIN * IMG_HEIGHT)
+WINDOW_MAX_Y  = int(WINDOW_MAX * IMG_HEIGHT)
+WINDOW_STEP_X = 1/2
+WINDOW_STEP_Y = 1/2
+WINDOW_SCALES = [1.0, 2.0, 3.0]
 
-def GET_VAR_CELL(x, y):
-    if 0 <= x < IMG_WIDTH and VAR_CELL_MIN_Y <= y <= VAR_CELL_MAX_Y:
-        #width = 32
-        width = ((y-400)*(175/300) + 15) / 2
-        #width = ((y-400)*(y-400)*(200/(300*300)) + 25) / 2
-        return (int(x-width), int(y-width), int(x+width), int(y+width))
-    else:
-        return None
+#def GET_VAR_CELL(x, y):
+#    if 0 <= x < IMG_WIDTH and VAR_CELL_MIN_Y <= y <= VAR_CELL_MAX_Y:
+#        width = 32
+#        #width = ((y-400)*(175/300) + 15) / 2
+#        #width = ((y-400)*(y-400)*(200/(300*300)) + 25) / 2
+#        return (int(x-width), int(y-width), int(x+width), int(y+width))
+#    else:
+#        return None
 
-def GET_VAR_CELLS():
+def GET_WINDOWS():
     cells = []
-    center = [0, VAR_CELL_MAX_Y]
-    while True:
-        cell = GET_VAR_CELL(center[0], center[1])
-        if cell == None:
-            break
-        if cell[0] < 0: #cell collides with left side
+    for scale in WINDOW_SCALES:
+        cellHeight = int(INPUT_HEIGHT * scale)
+        cellWidth  = int(INPUT_WIDTH * scale)
+        cell = [0, WINDOW_MAX_Y - cellHeight, cellWidth, WINDOW_MAX_Y]
+        while True:
+            if cell[2] > IMG_WIDTH:
+                cell[0] = 0
+                cell[2] = cellWidth
+                cell[1] -= int(cellHeight * WINDOW_STEP_Y)
+                cell[3] -= int(cellHeight * WINDOW_STEP_Y)
+            if cell[1] < WINDOW_MIN_Y:
+                break
+            #store cell
+            cells.append(cell.copy())
             #move right
-            center[0] += -cell[0]
-            if center[0] >= IMG_WIDTH:
-                #move up and left
-                center[0] = 0
-                center[1] -= int((cell[3]-cell[1]) * VAR_CELL_STEP_Y)
-            continue
-        if cell[2] > IMG_WIDTH or cell[3] > IMG_HEIGHT: #cell collides with right/bottom side
-            #move up and left
-            center[0] = 0
-            center[1] -= int((cell[3]-cell[1]) * VAR_CELL_STEP_Y)
-            continue
-        if cell[1] < 0: #cell collides with top side
-            break
-        #store cell
-        cells.append(cell)
-        #move right
-        center[0] += int((cell[2]-cell[0]) * VAR_CELL_STEP_X)
-        if center[0] >= IMG_WIDTH:
-            #move up and left
-            center[0] = 0
-            center[1] -= int((cell[3]-cell[1]) * VAR_CELL_STEP_Y)
+            cell[0] += int(cellWidth * WINDOW_STEP_X)
+            cell[2] += int(cellWidth * WINDOW_STEP_X)
     return cells

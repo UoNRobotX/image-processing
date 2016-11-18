@@ -36,7 +36,7 @@ description = """
                 Each such line is followed by indented lines.
                     " 1,2,3,4" specifies a box with top-left 1,2 and bottom-right 3,4.
         varcells
-            Just display sizes of some variable-size cells.
+            Just display some windows of the image that the networks would be run on.
             No output is written.
 """
 parser = argparse.ArgumentParser(

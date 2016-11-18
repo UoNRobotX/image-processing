@@ -1,4 +1,4 @@
-import os, time, re
+import os, time, re, math
 import numpy as np
 from PIL import Image, ImageDraw
 import tensorflow as tf
@@ -116,39 +116,31 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
     #obtain PIL image
     image = Image.open(filename)
     #get cell data
-    cellPositions = GET_VAR_CELLS()
-    cellResults = [None for pos in cellPositions]
-        #contains -2 (static filtered), -1 (coarse filtered), or an output
-    cellImgs = []
-    cellImgIndices = []
-    for cellIdx in range(len(cellPositions)):
+    winPositions = GET_WINDOWS()
+    winResults = [None for pos in winPositions] #will contain -2 (filtered), -1 (water), or an output
+    winImgs = []
+    winImgIndices = []
+    for winIdx in range(len(winPositions)):
         #get cell position
-        topLeftX = cellPositions[cellIdx][0]
-        topLeftY = cellPositions[cellIdx][1]
-        bottomRightX = cellPositions[cellIdx][2]
-        bottomRightY = cellPositions[cellIdx][3]
-        #use static filter
-        hasOverlappingFilteredCell = False
-        for i in range(topLeftY // CELL_HEIGHT, bottomRightY // CELL_HEIGHT):
-            for j in range(topLeftX // CELL_WIDTH, bottomRightX // CELL_WIDTH):
-                if cellFilter[i][j] == 1:
-                    hasOverlappingFilteredCell = True
-                    break
-            if hasOverlappingFilteredCell:
-                break
-        if hasOverlappingFilteredCell:
-            cellResults[cellIdx] = -2
+        pos = winPositions[winIdx]
+        topLeftX     = pos[0]
+        topLeftY     = pos[1]
+        bottomRightX = pos[2]
+        bottomRightY = pos[3]
+        #use filter
+        if isFiltered(topLeftX, topLeftY, bottomRightX, bottomRightY, cellFilter):
+            winResults[winIdx] = -2
             continue
-        #get cell image
-        cellImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
-        cellImg = cellImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
-        cellImgs.append(cellImg)
-        cellImgIndices.append(cellIdx)
+        #get window image
+        winImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
+        winImg = winImg.resize((INPUT_WIDTH, INPUT_HEIGHT), resample=Image.LANCZOS)
+        winImgs.append(winImg)
+        winImgIndices.append(winIdx)
     #obtain numpy arrays
     inputs = [
-        np.array(list(cellImg.getdata())).astype(np.float32).reshape(
+        np.array(list(winImg.getdata())).astype(np.float32).reshape(
             (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
-        ) for cellImg in cellImgs
+        ) for winImg in winImgs
     ]
     if False: #use coarse network
         outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
@@ -156,22 +148,53 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
         unfiltered = []
         for i in range(len(outputs)):
             if outputs[i][0] > threshold:
-                cellResults[cellImgIndices[i]] = -1
+                winResults[winImgIndices[i]] = -1
             else:
                 unfiltered.append(i)
         inputs = [inputs[i] for i in unfiltered]
-        cellImgIndices = [cellImgIndices[i] for i in unfiltered]
+        winImgIndices = [winImgIndices[i] for i in unfiltered]
     preProcessingTime = time.time() - startTime
     #use detailed network
     outputs = detailedNet.y.eval(feed_dict={detailedNet.x: inputs, detailedNet.p_dropout: 1.0})
     for i in range(len(outputs)):
-        cellResults[cellImgIndices[i]] = outputs[i]
-    processingTime = time.time() - startTime - preProcessingTime
+        winResults[winImgIndices[i]] = outputs[i]
+    filtered = [
+        winPositions[i] for i in range(len(winPositions))
+        if isinstance(winResults[i], int) and winResults[i] == -2
+    ]
+    coarseFiltered = [
+        winPositions[i] for i in range(len(winPositions))
+        if isinstance(winResults[i], int) and winResults[i] == -1
+    ]
+    predictions = [
+        winPositions[i] for i in range(len(winPositions))
+        if not isinstance(winResults[i], int) and winResults[i][0] > threshold
+    ]
+    #remove some overlapping boxes
+    maxOverlap = 0.2
+    predictions.sort(key=lambda box: (box[2] - box[0]) * (box[3] - box[1]), reverse=True) #sort by area
+    removed = [False for box in predictions]
+    for i in range(len(predictions)):
+        if removed[i]:
+            continue
+        for j in range(i+1, len(predictions)):
+            if not removed[j]:
+                b1 = predictions[i]
+                b2 = predictions[j]
+                x1 = max(b1[0], b2[0])
+                y1 = max(b1[1], b2[1])
+                x2 = min(b1[2], b2[2])
+                y2 = min(b1[3], b2[3])
+                overlap = max(0, x2-x1) * max(0,y2-y1)
+                if overlap > maxOverlap:
+                    removed[j] = True
+    boxes = [predictions[i] for i in range(len(predictions)) if not removed[i]]
     #print info
+    processingTime = time.time() - startTime - preProcessingTime
     print("Processed %s, pre-processing time %.2f secs, processing time %.2f secs" % \
         (filename, preProcessingTime, processingTime))
     #return results
-    return (cellPositions, cellResults)
+    return filtered, coarseFiltered, boxes
 
 def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
@@ -216,26 +239,26 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
 def writeDetailedResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
     COARSE_COLOR = (192, 160, 0, 128)
-    POS_COLOR = (0, 255, 0, 96)
+    BOX_COLOR = (0, 255, 0, 96)
     if textOutput:
         raise Exception("Not implemented")
     else:
         image = Image.open(filename)
         draw = ImageDraw.Draw(image, "RGBA")
-        cellPositions = result[0]
-        cellResults = result[1]
-        for i in range(len(cellPositions)):
-            if isinstance(cellResults[i], int) and cellResults[i] == -2:
-                draw.rectangle(cellPositions[i], fill=FILTER_COLOR)
-        for i in range(len(cellPositions)):
-            if isinstance(cellResults[i], int) and cellResults[i] == -1:
-                draw.rectangle(cellPositions[i], fill=COARSE_COLOR)
-        for i in range(len(cellPositions)):
-            if not isinstance(cellResults[i], int) and cellResults[i][0] > threshold:
-                rect = list(cellPositions[i])
-                draw.rectangle(rect, outline="black")
-                if False: #indicate confidence
-                    rect[1] += int(CELL_HEIGHT*(1-cellResults[i][0]))
-                draw.rectangle(rect, fill=POS_COLOR)
+        filtered, coarseFiltered, boxes = result
+        for box in filtered:
+            draw.rectangle(box, fill=FILTER_COLOR)
+        for box in coarseFiltered:
+            draw.rectangle(box, fill=COARSE_COLOR)
+        for box in boxes:
+            draw.rectangle(box, outline="black", fill=BOX_COLOR)
         #save the image
         image.save(outputFilename)
+
+def isFiltered(topLeftX, topLeftY, bottomRightX, bottomRightY, cellFilter):
+    for i in range(topLeftY // CELL_HEIGHT, bottomRightY // CELL_HEIGHT):
+        for j in range(topLeftX // CELL_WIDTH, bottomRightX // CELL_WIDTH):
+            if cellFilter[i][j]:
+                return True
+    return False
+

@@ -50,13 +50,10 @@ parser.add_argument("-s", dest="numSteps", type=int, default=100, \
 parser.add_argument("-o", dest="outFile", \
     help="When training, specifies binary files (*_train.npz and *_test.npz) to write data to.\
         When testing, specifies a binary file (*.npz) to write data to.\
-        When running or generating samples, specifies the output image file.\
-        When running, specifying a .txt file causes the output to resemble training data.\
-        When running, specifying a directory causes .jpg files in it to be used \
-        (by default, output is written to same-name files).")
+        When running or generating samples, specifies the output image file.")
 parser.add_argument("-t", dest="threshold", type=float, default=0.5, \
     help="Affects the precision-recall tradeoff.\
-        If using the coarse network, its positive predictions will be those above this value.\
+        Network positive predictions will be those with an output above this value.\
         The default is 0.5.")
 
 args = parser.parse_args()

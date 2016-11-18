@@ -15,22 +15,26 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
     if useCoarseOnly: #train coarse network
         net = createCoarseNetwork(tf.Graph(), threshold)
         prod = CoarseBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
-        testProd = CoarseBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
+        valProd = CoarseBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
+        batchSize = COARSE_BATCH_SIZE
         summaryDir = COARSE_SUMMARIES + "/train"
         testSummaryDir = COARSE_SUMMARIES + "/validate"
         saveFile = COARSE_SAVE_FILE
     else: #train detailed network
         net = createDetailedNetwork(tf.Graph())
         prod = DetailedBatchProducer(dataFile, cellFilter, outFile and outFile + "_train")
-        testProd = DetailedBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
+        valProd = DetailedBatchProducer(dataFile2, cellFilter, outFile and outFile + "_validate")
+        batchSize = DETAILED_BATCH_SIZE
         summaryDir = DETAILED_SUMMARIES + "/train"
         testSummaryDir = DETAILED_SUMMARIES + "/validate"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
+    print("Training set size: %d" % prod.getDatasetSize())
+    print("Validation set size: %d" % valProd.getDatasetSize())
     #train
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
-    testSummaryWriter = tf.train.SummaryWriter(testSummaryDir, net.graph)
+    valSummaryWriter = tf.train.SummaryWriter(testSummaryDir, net.graph)
     with tf.Session(graph=net.graph) as sess:
         saver = tf.train.Saver(tf.all_variables())
         #reinitialise or load values
@@ -39,10 +43,10 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
         else:
             saver.restore(sess, saveFile)
         #do training
-        p_dropout = 0.9 #1.0 means no dropout
+        p_dropout = TRAIN_DROPOUT
         prevAcc = 0.0
         for step in range(numSteps):
-            inputs, outputs = prod.getBatch(BATCH_SIZE)
+            inputs, outputs = prod.getBatch(batchSize)
             if step > 0 and step % TRAINING_RUN_PERIOD == 0: #occasionally save runtime metadata
                 run_metadata = tf.RunMetadata()
                 summary, _ = sess.run(
@@ -60,12 +64,12 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
             summaryWriter.add_summary(summary, step)
             #occasionally print step and accuracy
             if step % TRAINING_LOG_PERIOD == 0 or step == numSteps-1:
-                inputs, outputs = testProd.getBatch(BATCH_SIZE)
+                inputs, outputs = valProd.getBatch(batchSize)
                 acc, prec, rec = sess.run(
                     [net.accuracy, net.precision, net.recall],
                     feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 1.0}
                 )
-                testSummaryWriter.add_summary(summary, step)
+                valSummaryWriter.add_summary(summary, step)
                 rps = (outputs.argmax(1) == 0).sum() / len(outputs)
                     #num positive samples / num samples
                 print(

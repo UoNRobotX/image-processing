@@ -4,7 +4,7 @@ import tensorflow as tf
 from .constants import *
 
 class Network:
-    """ Holds nodes of a tensorflow network """
+    """ Holds nodes for a tensorflow network """
     def __init__(self, graph, x, y_, p_dropout, y, accuracy, precision, recall, train, summaries):
         self.graph = graph
         self.x = x
@@ -18,18 +18,18 @@ class Network:
         self.summaries = tf.merge_summary(summaries)
 
 def createCoarseNetwork(graph, threshold):
+    #parameters for network variations
     WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
     BIASES_INIT = 1.0
-    ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
-    OUTPUT_ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     PREPROCESS_GRAY = False
     PREPROCESS_HSV = False
     PREPROCESS_NORMALIZE = True
+    ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
+    OUTPUT_ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     HIDDEN_LAYERS = [30, 10]
     COST_FUNC = "squared_error" #"squared_error", "logistic_loss", "softmax_cross_entropy_with_logits"
-    OPTIMIZER = "adam"
-        #"adam", "gradient_descent", "adadelta", "adagrad", "momentum", "ftrl", "rmsprop"
-    DROPOUT = False
+    OPTIMIZER = "adam" #"adam", "gradient_descent", "adadelta", "adagrad", "momentum"
+    USE_DROPOUT = False
     #helper functions
     def createLayer(input, inSize, outSize, layerName, summaries, activation=ACTIVATION_FUNC):
         with tf.name_scope(layerName):
@@ -40,7 +40,7 @@ def createCoarseNetwork(graph, threshold):
                 b = tf.Variable(tf.constant(BIASES_INIT, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
             wb = tf.matmul(input, w) + b
-            if DROPOUT:
+            if USE_DROPOUT:
                 wb = tf.nn.dropout(wb, p_dropout)
             return activation(wb, name="out")
     #create nodes
@@ -49,11 +49,11 @@ def createCoarseNetwork(graph, threshold):
         with tf.name_scope("coarse_net"):
             inputChannels = IMG_CHANNELS
             #input nodes
-            with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
+            with tf.name_scope("input"):
                 x = tf.placeholder(tf.float32, \
                     [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
                 y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
-                p_dropout = tf.placeholder(tf.float32, name="p_dropout") #currently unused
+                p_dropout = tf.placeholder(tf.float32, name="p_dropout")
             with tf.name_scope("process_input"):
                 if PREPROCESS_GRAY:
                     x2 = tf.image.rgb_to_grayscale(x)
@@ -140,20 +140,32 @@ def createCoarseNetwork(graph, threshold):
     return Network(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def createDetailedNetwork(graph):
+    #parameters for network variations
+    WEIGHTS_INIT = tf.truncated_normal #tf.truncated_normal, tf.random_normal, tf.random_uniform
+    BIASES_INIT = 1.0
+    PREPROCESS_GRAY = False
+    PREPROCESS_HSV = False
+    PREPROCESS_NORMALIZE = True
+    CONV_LAYERS = [16, 32]
+    CONV_STRIDE = 1
+    POOL_STRIDE = 2
+    DENSE_LAYERS = [64]
+    ACTIVATION_FUNC = tf.nn.relu #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
     #helper functions
     def createWeights(shape):
         with tf.name_scope("weights"):
-            return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
+            return tf.Variable(WEIGHTS_INIT(shape, stddev=0.1))
     def createBiases(shape):
         with tf.name_scope("biases"):
-            return tf.Variable(tf.constant(0.1, shape=shape))
+            return tf.Variable(tf.constant(BIASES_INIT, shape=shape))
     def createConv(x, w, b):
         with tf.name_scope("conv"):
-            xw = tf.nn.conv2d(x, w, strides=[1, 1, 1, 1], padding="SAME")
+            xw = tf.nn.conv2d(x, w, strides=[1, CONV_STRIDE, CONV_STRIDE, 1], padding="SAME")
             return tf.nn.relu(xw + b)
     def createPool(c):
         with tf.name_scope("pool"):
-            return tf.nn.max_pool(c, ksize=[1, 2, 2, 1], strides=[1, 2, 2, 1], padding="SAME")
+            return tf.nn.max_pool(c, ksize=[1, POOL_STRIDE, POOL_STRIDE, 1], \
+                strides=[1, POOL_STRIDE, POOL_STRIDE, 1], padding="SAME")
     #create nodes
     summaries = []
     with graph.as_default():
@@ -161,52 +173,52 @@ def createDetailedNetwork(graph):
             inputChannels = IMG_CHANNELS
             #input nodes
             with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
-                x = tf.placeholder(tf.float32, [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
+                x = tf.placeholder(tf.float32, \
+                    [None, INPUT_HEIGHT, INPUT_WIDTH, inputChannels], name="x_input")
                 y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
                 p_dropout = tf.placeholder(tf.float32, name="p_dropout")
             with tf.name_scope("process_input"):
-                rgb2gray = False
-                rgb2hsv = False
-                normalise = True
-                if rgb2gray:
+                if PREPROCESS_GRAY:
                     x2 = tf.image.rgb_to_grayscale(x)
                     inputChannels = 1
-                    if normalise:
+                    if PREPROCESS_NORMALIZE:
                         x2 = tf.div(x2, tf.constant(255.0))
-                elif rgb2hsv:
+                elif PREPROCESS_HSV:
                     x2 = tf.div(x, tf.constant(255.0)) #normalisation is required
                     x2 = tf.image.rgb_to_hsv(x2)
                 else:
-                    if normalise:
+                    if PREPROCESS_NORMALIZE:
                         x2 = tf.div(x, tf.constant(255.0))
                     else:
                         x2 = x
                 addSummaries(x2, summaries, "input", "image")
-            #first convolutional layer
-            with tf.name_scope("conv_layer1"):
-                w1 = createWeights([5, 5, 3, 16]) #filter_height, filter_width, in_channels, out_channels
-                b1 = createBiases([16])
-                c1 = createConv(x2, w1, b1)
-                p1 = createPool(c1)
-            #second convolutional layer
-            with tf.name_scope("conv_layer2"):
-                w2 = createWeights([5, 5, 16, 32])
-                b2 = createBiases([32])
-                c2 = createConv(p1, w2, b2)
-                p2 = createPool(c2)
-            #densely connected layer
-            with tf.name_scope("dense_layer"):
-                w3 = createWeights([INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 32, 64])
-                b3 = createBiases([64])
-                p2_flat = tf.reshape(p2, [-1, INPUT_HEIGHT//4 * INPUT_WIDTH//4 * 32])
-                h1 = tf.nn.relu(tf.matmul(p2_flat, w3) + b3)
-            #dropout
-            h1_dropout = tf.nn.dropout(h1, p_dropout)
+            #convolutional layers
+            convSizes = [inputChannels] + CONV_LAYERS
+            input = x2
+            for i in range(1, len(convSizes)):
+                with tf.name_scope("conv_layer" + str(i)):
+                    w = createWeights([5, 5, convSizes[i-1], convSizes[i]])
+                        #filter_height, filter_width, in_channels, out_channels
+                    b = createBiases([convSizes[i]])
+                    c = createConv(input, w, b)
+                    input = createPool(c)
+            #flatten input
+            numInputs = INPUT_HEIGHT // (POOL_STRIDE * len(CONV_LAYERS)) * \
+                INPUT_WIDTH // (POOL_STRIDE * len(CONV_LAYERS)) * convSizes[-1]
+            input = tf.reshape(input, [-1, numInputs])
+            #densely connected layers
+            denseSizes = [numInputs] + DENSE_LAYERS
+            for i in range(1, len(denseSizes)):
+                with tf.name_scope("dense_layer" + str(i)):
+                    w = createWeights([denseSizes[i-1], denseSizes[i]])
+                    b = createBiases([denseSizes[i]])
+                    input = ACTIVATION_FUNC(tf.matmul(input, w) + b)
+                    input = tf.nn.dropout(input, p_dropout)
             #readout layer
             with tf.name_scope("readout_layer"):
-                w4 = createWeights([64, 2])
-                b4 = createBiases([2])
-                y  = tf.nn.softmax(tf.matmul(h1_dropout, w4) + b4)
+                w = createWeights([denseSizes[-1], 2])
+                b = createBiases([2])
+                y  = tf.nn.softmax(tf.matmul(input, w) + b)
             #cost
             with tf.name_scope("cost"):
                 cost = -(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)))
@@ -245,11 +257,10 @@ def createDetailedNetwork(graph):
     return Network(graph, x, y_, p_dropout, y, accuracy, prec, rec, train, summaries)
 
 def addSummaries(node, summaries, name, method):
-    """
-        Used to create and attach summary nodes to "node".
+    """ Used to create and attach summary nodes to "node".
         "method" specifies the kinds of summaries to add.
     """
-    with tf.device("/cpu:0"):
+    with tf.device("/cpu:0"): #it seems summary nodes don't work for GPUs
         if method == "mean":
             summaries.append(tf.scalar_summary(name + "/mean", tf.reduce_mean(node)))
         elif method == "mean_stddev_hist":

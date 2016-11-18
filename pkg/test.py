@@ -14,14 +14,17 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
     if useCoarseOnly: #test coarse network
         net = createCoarseNetwork(tf.Graph(), threshold)
         prod = CoarseBatchProducer(dataFile, cellFilter, outFile)
+        batchSize = COARSE_BATCH_SIZE
         summaryDir = COARSE_SUMMARIES + "/test"
         saveFile = COARSE_SAVE_FILE
     else: #test detailed network
         net = createDetailedNetwork(tf.Graph())
         prod = DetailedBatchProducer(dataFile, cellFilter, outFile)
+        batchSize = DETAILED_BATCH_SIZE
         summaryDir = DETAILED_SUMMARIES + "/test"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
+    print("Testing set size: %d" % prod.getDatasetSize())
     #test
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
@@ -34,7 +37,7 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
             tf.train.Saver(tf.all_variables()).restore(sess, saveFile)
         #do testing
         for step in range(numSteps):
-            inputs, outputs = prod.getBatch(BATCH_SIZE)
+            inputs, outputs = prod.getBatch(batchSize)
             feedDict = {net.x: inputs, net.y_: outputs, net.p_dropout: 1.0}
             if step > 0 and step % TESTING_RUN_PERIOD == 0: #if saving runtime metadata
                 run_metadata = tf.RunMetadata()
@@ -60,8 +63,9 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
     accs  = [m[0] for m in metrics]
     precs = [m[1] for m in metrics]
     recs  = [m[2] for m in metrics]
-    print(
-        "Averages: accuracy %.2f, precision %.2f, recall %.2f" %
-        (sum(accs)/len(accs), sum(precs)/len(precs), sum(recs)/len(recs))
-    )
+    print("Averages: accuracy %.2f, precision %.2f, recall %.2f" % \
+        (avg(accs), avg(precs), avg(recs)))
     summaryWriter.close()
+
+def avg(nums):
+    return sum(nums)/len(nums)
