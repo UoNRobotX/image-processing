@@ -142,7 +142,7 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
             (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
         ) for winImg in winImgs
     ]
-    if False: #use coarse network
+    if True: #use coarse network
         outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
         #remove filtered cells
         unfiltered = []
@@ -238,7 +238,7 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
 
 def writeDetailedResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
-    COARSE_COLOR = (192, 160, 0, 128)
+    COARSE_COLOR = (192, 160, 0, 32)
     BOX_COLOR = (0, 255, 0, 96)
     if textOutput:
         raise Exception("Not implemented")

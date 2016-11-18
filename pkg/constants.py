@@ -16,36 +16,31 @@ DETAILED_SAVE_FILE = "model_detailed/model.ckpt"
 COARSE_SUMMARIES   = "summaries_coarse" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES = "summaries_detailed"
 
-WINDOW_MIN = 0.4
-WINDOW_MAX = 0.7
-WINDOW_MIN_Y  = int(WINDOW_MIN * IMG_HEIGHT)
-WINDOW_MAX_Y  = int(WINDOW_MAX * IMG_HEIGHT)
+WINDOW_SCALES = [1.0, 2.0, 3.0]
+WINDOW_MIN    = [0.42, 0.43, 0.5]
+WINDOW_MAX    = [0.55, 0.65, 0.7]
+WINDOW_MIN_Y  = [int(m * IMG_HEIGHT) for m in WINDOW_MIN]
+WINDOW_MAX_Y  = [int(m * IMG_HEIGHT) for m in WINDOW_MAX]
 WINDOW_STEP_X = 1/2
 WINDOW_STEP_Y = 1/2
-WINDOW_SCALES = [1.0, 2.0, 3.0]
-
-#def GET_VAR_CELL(x, y):
-#    if 0 <= x < IMG_WIDTH and VAR_CELL_MIN_Y <= y <= VAR_CELL_MAX_Y:
-#        width = 32
-#        #width = ((y-400)*(175/300) + 15) / 2
-#        #width = ((y-400)*(y-400)*(200/(300*300)) + 25) / 2
-#        return (int(x-width), int(y-width), int(x+width), int(y+width))
-#    else:
-#        return None
 
 def GET_WINDOWS():
+    """ Returns a list of [topLeftX,topLeftY,bottomRightX,bottomRightY] values.
+        Each value specifies a window in the image to be sent to the detailed network.
+    """
     cells = []
-    for scale in WINDOW_SCALES:
+    for i in range(len(WINDOW_SCALES)):
+        scale = WINDOW_SCALES[i]
         cellHeight = int(INPUT_HEIGHT * scale)
         cellWidth  = int(INPUT_WIDTH * scale)
-        cell = [0, WINDOW_MAX_Y - cellHeight, cellWidth, WINDOW_MAX_Y]
+        cell = [0, WINDOW_MAX_Y[i] - cellHeight, cellWidth, WINDOW_MAX_Y[i]]
         while True:
             if cell[2] > IMG_WIDTH:
                 cell[0] = 0
                 cell[2] = cellWidth
                 cell[1] -= int(cellHeight * WINDOW_STEP_Y)
                 cell[3] -= int(cellHeight * WINDOW_STEP_Y)
-            if cell[1] < WINDOW_MIN_Y:
+            if cell[1] < WINDOW_MIN_Y[i]:
                 break
             #store cell
             cells.append(cell.copy())
@@ -53,3 +48,13 @@ def GET_WINDOWS():
             cell[0] += int(cellWidth * WINDOW_STEP_X)
             cell[2] += int(cellWidth * WINDOW_STEP_X)
     return cells
+
+#def GET_WINDOW(x, y):
+#    """ Returns a window with some location and size, given a center """
+#    if 0 <= x < IMG_WIDTH and VAR_CELL_MIN_Y <= y <= VAR_CELL_MAX_Y:
+#        width = 32
+#        #width = ((y-400)*(175/300) + 15) / 2
+#        #width = ((y-400)*(y-400)*(200/(300*300)) + 25) / 2
+#        return (int(x-width), int(y-width), int(x+width), int(y+width))
+#    else:
+#        return None

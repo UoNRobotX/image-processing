@@ -150,7 +150,7 @@ class Window:
                 cellHeight = int(INPUT_HEIGHT * scale)
                 cellWidth  = int(INPUT_WIDTH * scale)
                 x = int(i * IMG_WIDTH / len(WINDOW_SCALES))
-                cell = [x, WINDOW_MAX_Y - cellHeight, x + cellWidth, WINDOW_MAX_Y]
+                cell = [x, WINDOW_MAX_Y[i] - cellHeight, x + cellWidth, WINDOW_MAX_Y[i]]
                 while True:
                     self.canvas.create_rectangle(
                         cell[0], cell[1], cell[2], cell[3], outline=colors[i], width=2
@@ -160,7 +160,7 @@ class Window:
                     cell[2] += int(cellWidth * WINDOW_STEP_X)
                     cell[1] -= int(cellHeight * WINDOW_STEP_Y)
                     cell[3] -= int(cellHeight * WINDOW_STEP_Y)
-                    if cell[2] > IMG_WIDTH or cell[1] < WINDOW_MIN_Y:
+                    if cell[2] > IMG_WIDTH or cell[1] < WINDOW_MIN_Y[i]:
                         break
         #set handlers
         self.canvas.bind("<Configure>", self.resizeCallback)
