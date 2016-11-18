@@ -226,7 +226,7 @@ class DetailedBatchProducer:
                 winImgs = [winImg]
                 if False: #maximise image contrast
                     winImgs = [ImageOps.autocontrast(img) for img in winImgs]
-                if False and containsBuoy: #add rotated images
+                if True and containsBuoy: #add rotated images
                     winImgs += [img.rotate(180) for img in winImgs]
                     winImgs += [img.rotate(90) for img in winImgs]
                 if True and containsBuoy: #add flipped images
