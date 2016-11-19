@@ -16,13 +16,13 @@ DETAILED_SAVE_FILE = "model_detailed/model.ckpt"
 COARSE_SUMMARIES   = "summaries_coarse" #write summary data here, for use with tensorboard
 DETAILED_SUMMARIES = "summaries_detailed"
 
-WINDOW_SCALES = [1.0, 2.0, 3.0]
-WINDOW_MIN    = [0.42, 0.43, 0.5]
-WINDOW_MAX    = [0.55, 0.65, 0.7]
+WINDOW_SCALES = [1.0, 1.5, 2.5]
+WINDOW_MIN    = [0.42, 0.44, 0.5]
+WINDOW_MAX    = [0.55, 0.65, 0.68]
 WINDOW_MIN_Y  = [int(m * IMG_HEIGHT) for m in WINDOW_MIN]
 WINDOW_MAX_Y  = [int(m * IMG_HEIGHT) for m in WINDOW_MAX]
-WINDOW_STEP_X = 1/2
-WINDOW_STEP_Y = 1/2
+WINDOW_STEP_X = 5/12
+WINDOW_STEP_Y = 5/12
 
 def GET_WINDOWS():
     """ Returns a list of [topLeftX,topLeftY,bottomRightX,bottomRightY] values.

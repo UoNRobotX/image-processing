@@ -236,7 +236,7 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
         image.save(outputFilename)
 
 def writeDetailedResult(result, filename, outputFilename, textOutput, threshold):
-    FILTER_COLOR = (128, 0, 128, 128)
+    FILTER_COLOR = (128, 0, 128, 32)
     COARSE_COLOR = (192, 160, 0, 32)
     BOX_COLOR = (0, 255, 0, 96)
     if textOutput:

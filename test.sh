@@ -3,8 +3,8 @@
 
 set -e
 
-#remove any cached training/validation/testing data
-rm -f data_*.npz
+##remove any cached training/validation/testing data
+#rm -f data_*.npz
 
 #train the coarse network
 echo "Training coarse net"
@@ -12,16 +12,12 @@ echo "Training coarse net"
 
 #train the detailed network
 echo "Training detailed net"
+sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.25/' pkg/network_input.py
 ./main.sh train detailed -s 3000 -n
-sed -i 's/\(if not containsBuoy and random.random() >\) [0-9.]\+/\1 0.3/' pkg/network_input.py
-rm -f data_detailed_*.npz
+sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.1/' pkg/network_input.py
 ./main.sh train detailed -s 3000
-sed -i 's/if True \(and containsBuoy: #add rotated images\)/if False \1/' pkg/network_input.py
-rm -f data_detailed_*.npz
+sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.03/' pkg/network_input.py
 ./main.sh train detailed -s 3000
-#undo changes
-sed -i 's/\(if not containsBuoy and random.random() >\) [0-9.]\+/\1 0.1/' pkg/network_input.py
-sed -i 's/if False \(and containsBuoy: #add rotated images\)/if True \1/' pkg/network_input.py
 
 #run the coarse network on the images
 echo "Running coarse net"

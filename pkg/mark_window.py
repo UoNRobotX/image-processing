@@ -137,7 +137,7 @@ class Window:
         if True: #draw many cells
             cells = GET_WINDOWS()
             for i in range(len(cells)):
-                #if random.random() > 0.05: continue #randomly skip
+                if random.random() > 0.05: continue #randomly skip
                 #get cell position
                 cell = cells[i]
                 self.canvas.create_rectangle(
