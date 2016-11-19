@@ -29,8 +29,8 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
         testSummaryDir = DETAILED_SUMMARIES + "/validate"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
-    print("Training set size: %d" % prod.getDatasetSize())
-    print("Validation set size: %d" % valProd.getDatasetSize())
+    print("Training set size and rps: %d, %.2f" % (prod.getDatasetSize(), prod.getRps()))
+    print("Validation set size and rps: %d, %.2f" % (valProd.getDatasetSize(), prod.getRps()))
     #train
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)

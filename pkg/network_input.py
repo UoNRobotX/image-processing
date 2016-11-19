@@ -10,11 +10,15 @@ class CoarseBatchProducer:
     def __init__(self, dataFile, cellFilter, outFile=None):
         self.inputs  = []
         self.outputs = []
+        self.posInputIndices = []
+        self.negInputIndices = []
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
+            self.posInputIndices = data["arr_2"]
+            self.negInputIndices = data["arr_3"]
         else:
             filenames = []
             waterCells = []
@@ -35,7 +39,8 @@ class CoarseBatchProducer:
             self.loadImages(filenames, cellFilter, waterCells)
         #save data if requested
         if outFile != None:
-            np.savez_compressed(outFile, self.inputs, self.outputs)
+            np.savez_compressed(outFile, \
+                self.inputs, self.outputs, self.posInputIndices, self.negInputIndices)
     #load next image
     def loadImages(self, filenames, cellFilter, waterCells):
         for fileIdx in range(len(filenames)):
@@ -77,10 +82,10 @@ class CoarseBatchProducer:
                     ]
                     if False: #other
                         cellImgs = [img.filter(ImageFilter.FIND_EDGES) for img in cellImgs]
-                    if False and not containsWater: #add rotated images
+                    if False: #add rotated images
                         cellImgs += [img.rotate(180) for img in cellImgs]
                         cellImgs += [img.rotate(90) for img in cellImgs]
-                    if True and not containsWater: #add flipped images
+                    if True: #add flipped images
                         cellImgs += [img.transpose(Image.FLIP_LEFT_RIGHT) for img in cellImgs]
                     if False: #add sheared images
                         shearFactor = random.random()*0.8 - 0.4
@@ -104,6 +109,17 @@ class CoarseBatchProducer:
                     ] * len(cellImgs)
         if len(self.inputs) == 0:
             raise Exception("No inputs")
+        #get indices of positive/negative inputs
+        self.posInputIndices = [
+            i for i in range(len(self.inputs)) if self.outputs[i][0]
+        ]
+        self.negInputIndices = [
+            i for i in range(len(self.inputs)) if not self.outputs[i][0]
+        ]
+        if len(self.posInputIndices) == 0:
+            raise Exception("No positive inputs")
+        if len(self.negInputIndices) == 0:
+            raise Exception("No negative inputs")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
@@ -111,22 +127,24 @@ class CoarseBatchProducer:
         c = 0
         while c < size:
             #randomly select an input and output
-            idx = math.floor(random.random() * len(self.inputs))
-            ##bias samples towards positive examples
-            #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
-            #    continue
-            #add input and output to batch
-            inputs.append(self.inputs[idx])
-            outputs.append(self.outputs[idx])
+            coarseChoosePositive = random.random() < 0.2
+            if coarseChoosePositive:
+                idx = math.floor(random.random() * len(self.posInputIndices))
+                inputs.append(self.inputs[self.posInputIndices[idx]])
+                outputs.append(self.outputs[self.posInputIndices[idx]])
+            else:
+                idx = math.floor(random.random() * len(self.negInputIndices))
+                inputs.append(self.inputs[self.negInputIndices[idx]])
+                outputs.append(self.outputs[self.negInputIndices[idx]])
             #update
             c += 1
         return np.array(inputs), np.array(outputs)
     #returns the data set size
     def getDatasetSize(self):
-        numInputs = 0
-        for i in range(len(self.inputs)):
-            numInputs += len(self.inputs[i])
-        return numInputs
+        return len(self.inputs)
+    #returns the ratio of positive to negative inputs
+    def getRps(self):
+        return len(self.posInputIndices) / len(self.negInputIndices)
 
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
@@ -134,11 +152,15 @@ class DetailedBatchProducer:
     def __init__(self, dataFile, cellFilter, outFile=None):
         self.inputs  = []
         self.outputs = []
+        self.posInputIndices = []
+        self.negInputIndices = []
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
+            self.posInputIndices = data["arr_2"]
+            self.negInputIndices = data["arr_3"]
         else:
             filenames = []
             boxes = []
@@ -159,7 +181,8 @@ class DetailedBatchProducer:
             self.loadImages(filenames, cellFilter, boxes)
         #save data if requested
         if outFile != None:
-            np.savez_compressed(outFile, self.inputs, self.outputs)
+            np.savez_compressed(outFile, \
+                self.inputs, self.outputs, self.posInputIndices, self.negInputIndices)
     #load next image
     def loadImages(self, filenames, cellFilter, boxes):
         for fileIdx in range(len(filenames)):
@@ -247,6 +270,19 @@ class DetailedBatchProducer:
                 ] * len(winImgs)
                 if len(self.inputs) == 0:
                     raise Exception("No inputs")
+        if len(self.inputs) == 0:
+            raise Exception("No inputs")
+        #get indices of positive/negative inputs
+        self.posInputIndices = [
+            i for i in range(len(self.inputs)) if self.outputs[i][0]
+        ]
+        self.negInputIndices = [
+            i for i in range(len(self.inputs)) if not self.outputs[i][0]
+        ]
+        if len(self.posInputIndices) == 0:
+            raise Exception("No positive inputs")
+        if len(self.negInputIndices) == 0:
+            raise Exception("No negative inputs")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
@@ -254,19 +290,24 @@ class DetailedBatchProducer:
         c = 0
         while c < size:
             #randomly select an input and output
-            idx = math.floor(random.random() * len(self.inputs))
-            ##bias samples towards positive examples
-            #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
-            #    continue
-            #add input and output to batch
-            inputs.append(self.inputs[idx])
-            outputs.append(self.outputs[idx])
+            detailedChoosePositive = random.random() < 0.03
+            if detailedChoosePositive:
+                idx = math.floor(random.random() * len(self.posInputIndices))
+                inputs.append(self.inputs[self.posInputIndices[idx]])
+                outputs.append(self.outputs[self.posInputIndices[idx]])
+            else:
+                idx = math.floor(random.random() * len(self.negInputIndices))
+                inputs.append(self.inputs[self.negInputIndices[idx]])
+                outputs.append(self.outputs[self.negInputIndices[idx]])
             #update
             c += 1
         return np.array(inputs), np.array(outputs)
     #returns the data set size
     def getDatasetSize(self):
         return len(self.inputs)
+    #returns the ratio of positive to negative inputs
+    def getRps(self):
+        return len(self.posInputIndices) / len(self.negInputIndices)
 
 def getCellFilter(filterFile):
     """ Obtains filter data from "filterFile", or uses an empty filter.

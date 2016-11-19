@@ -24,7 +24,7 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
         summaryDir = DETAILED_SUMMARIES + "/test"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
-    print("Testing set size: %d" % prod.getDatasetSize())
+    print("Testing set size and rps: %d, %.2f" % (prod.getDatasetSize(), prod.getRps()))
     #test
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
