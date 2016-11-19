@@ -8,8 +8,8 @@ class CoarseBatchProducer:
     """ Produces input values for the coarse network """
     #constructor
     def __init__(self, dataFile, cellFilter, outFile=None):
-        self.inputs  = None
-        self.outputs = None
+        self.inputs  = []
+        self.outputs = []
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
@@ -31,9 +31,6 @@ class CoarseBatchProducer:
                         waterCells[-1].append([int(c) for c in line.strip()])
             if len(filenames) == 0:
                 raise Exception("No filenames")
-            #allocate inputs and outputs
-            self.inputs = [None for name in filenames]
-            self.outputs = [None for name in filenames]
             #load images
             self.loadImages(filenames, cellFilter, waterCells)
         #save data if requested
@@ -44,9 +41,7 @@ class CoarseBatchProducer:
         for fileIdx in range(len(filenames)):
             #obtain PIL image
             image = Image.open(filenames[fileIdx])
-            #allocate inputs and outputs
-            self.inputs[fileIdx] = []
-            self.outputs[fileIdx] = []
+            #get inputs and outputs
             for row in range(len(waterCells[fileIdx])):
                 for col in range(len(waterCells[fileIdx][row])):
                     #use static filter
@@ -55,7 +50,7 @@ class CoarseBatchProducer:
                     #determine whether the input should have a positive prediction
                     containsWater = waterCells[fileIdx][row][col] == 1
                     ##randomly skip
-                    #if not containsWater and random.random() > 0.25:
+                    #if not containsWater and random.random() < 0.75:
                     #    continue
                     #get cell image
                     cellImg = image.crop(
@@ -101,14 +96,14 @@ class CoarseBatchProducer:
                             for img in cellImgs
                         ]
                     #get inputs
-                    self.inputs[fileIdx] += [np.array(img).astype(np.float32) for img in cellImgs]
+                    self.inputs += [np.array(img).astype(np.float32) for img in cellImgs]
                     #get outputs
-                    self.outputs[fileIdx] += [
+                    self.outputs += [
                         np.array([1, 0]).astype(np.float32) if containsWater else
                         np.array([0, 1]).astype(np.float32)
                     ] * len(cellImgs)
-            if len(self.inputs[fileIdx]) == 0:
-                raise Exception("No unfiltered cells for \"" + filenames[fileIdx] + "\"")
+        if len(self.inputs) == 0:
+            raise Exception("No inputs")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
@@ -116,14 +111,13 @@ class CoarseBatchProducer:
         c = 0
         while c < size:
             #randomly select an input and output
-            fileIdx = math.floor(random.random() * len(self.inputs))
-            idx = math.floor(random.random() * len(self.inputs[fileIdx]))
+            idx = math.floor(random.random() * len(self.inputs))
             ##bias samples towards positive examples
             #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
             #    continue
             #add input and output to batch
-            inputs.append(self.inputs[fileIdx][idx])
-            outputs.append(self.outputs[fileIdx][idx])
+            inputs.append(self.inputs[idx])
+            outputs.append(self.outputs[idx])
             #update
             c += 1
         return np.array(inputs), np.array(outputs)
@@ -138,8 +132,8 @@ class DetailedBatchProducer:
     """Produces input values for the detailed network"""
     #constructor
     def __init__(self, dataFile, cellFilter, outFile=None):
-        self.inputs  = None
-        self.outputs = None
+        self.inputs  = []
+        self.outputs = []
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
             data = np.load(dataFile)
@@ -161,9 +155,6 @@ class DetailedBatchProducer:
                         boxes[-1].append([int(c) for c in line.strip().split(",")])
             if len(filenames) == 0:
                 raise Exception("No filenames")
-            #allocate inputs and outputs
-            self.inputs = [None for name in filenames]
-            self.outputs = [None for name in filenames]
             #load images
             self.loadImages(filenames, cellFilter, boxes)
         #save data if requested
@@ -174,9 +165,6 @@ class DetailedBatchProducer:
         for fileIdx in range(len(filenames)):
             #obtain PIL image
             image = Image.open(filenames[fileIdx])
-            #allocate inputs and outputs
-            self.inputs[fileIdx] = []
-            self.outputs[fileIdx] = []
             #get window positions
             windowPositions = GET_WINDOWS()
             for pos in windowPositions:
@@ -212,7 +200,7 @@ class DetailedBatchProducer:
                             containsBuoy = True
                             break
                 #randomly skip
-                if not containsBuoy and random.random() > 0.1:
+                if not containsBuoy and random.random() < 0.7:
                     continue
                 #get window image
                 winImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
@@ -251,14 +239,14 @@ class DetailedBatchProducer:
                         ]
                     winImgs += shearedImages
                 #get inputs
-                self.inputs[fileIdx] += [np.array(img).astype(np.float32) for img in winImgs]
+                self.inputs += [np.array(img).astype(np.float32) for img in winImgs]
                 #get outputs
-                self.outputs[fileIdx] += [
+                self.outputs += [
                     np.array([1, 0]).astype(np.float32) if containsBuoy else
                     np.array([0, 1]).astype(np.float32)
                 ] * len(winImgs)
-            if len(self.inputs[fileIdx]) == 0:
-                raise Exception("No inputs for \"" + filenames[fileIdx] + "\"")
+                if len(self.inputs) == 0:
+                    raise Exception("No inputs")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
@@ -266,23 +254,19 @@ class DetailedBatchProducer:
         c = 0
         while c < size:
             #randomly select an input and output
-            fileIdx = math.floor(random.random() * len(self.inputs))
-            idx = math.floor(random.random() * len(self.inputs[fileIdx]))
+            idx = math.floor(random.random() * len(self.inputs))
             ##bias samples towards positive examples
             #if self.outputs[fileIdx][idx][0] == 0 and random.random() < 0.5:
             #    continue
             #add input and output to batch
-            inputs.append(self.inputs[fileIdx][idx])
-            outputs.append(self.outputs[fileIdx][idx])
+            inputs.append(self.inputs[idx])
+            outputs.append(self.outputs[idx])
             #update
             c += 1
         return np.array(inputs), np.array(outputs)
     #returns the data set size
     def getDatasetSize(self):
-        numInputs = 0
-        for i in range(len(self.inputs)):
-            numInputs += len(self.inputs[i])
-        return numInputs
+        return len(self.inputs)
 
 def getCellFilter(filterFile):
     """ Obtains filter data from "filterFile", or uses an empty filter.

@@ -82,7 +82,7 @@ detailed: (batch size 50, 500 test steps)
                     partial buoy containment:
                         3000, 3000 - 0.94, 0.86, 0.92 //ok
             sliding window, 32x32, 0.4 to 0.7, 1/2 and 1/2, [2.0, 4.0, 6.0]
-                rps ~0.25 (rskip 0.1), then ~0.1 (rskip 0.3), then ~0.04 rps (rskip 0.3, no rotate)
+                rps ~0.25 (rskip 0.9), then ~0.1 (rskip 0.7), then ~0.04 rps (rskip 0.7, no rotate)
                 running time is about 0.5 secs per image
                 3000             - 0.96, 0.95, 0.82
                 3000, 3000       - 0.98, 0.86, 0.73
