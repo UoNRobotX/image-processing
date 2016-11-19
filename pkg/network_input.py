@@ -101,12 +101,7 @@ class CoarseBatchProducer:
                             for img in cellImgs
                         ]
                     #get inputs
-                    self.inputs[fileIdx] += [
-                        np.array(list(img.getdata())).astype(np.float32).reshape(
-                            (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
-                        )
-                        for img in cellImgs
-                    ]
+                    self.inputs[fileIdx] += [np.array(img).astype(np.float32) for img in cellImgs]
                     #get outputs
                     self.outputs[fileIdx] += [
                         np.array([1, 0]).astype(np.float32) if containsWater else
@@ -256,12 +251,7 @@ class DetailedBatchProducer:
                         ]
                     winImgs += shearedImages
                 #get inputs
-                self.inputs[fileIdx] += [
-                    np.array(list(img.getdata())).astype(np.float32).reshape(
-                        (INPUT_WIDTH, INPUT_HEIGHT, IMG_CHANNELS)
-                    )
-                    for img in winImgs
-                ]
+                self.inputs[fileIdx] += [np.array(img).astype(np.float32) for img in winImgs]
                 #get outputs
                 self.outputs[fileIdx] += [
                     np.array([1, 0]).astype(np.float32) if containsBuoy else

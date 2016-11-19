@@ -138,9 +138,8 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
         winImgIndices.append(winIdx)
     #obtain numpy arrays
     inputs = [
-        np.array(list(winImg.getdata())).astype(np.float32).reshape(
-            (INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS)
-        ) for winImg in winImgs
+        np.array(winImg).astype(np.float32) #3D array, list of rows of lists of pixel values
+        for winImg in winImgs
     ]
     if True: #use coarse network
         outputs = coarseNet.y.eval(feed_dict={coarseNet.x: inputs, coarseNet.p_dropout: 1.0})
