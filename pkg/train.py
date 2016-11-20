@@ -29,8 +29,12 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
         testSummaryDir = DETAILED_SUMMARIES + "/validate"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
-    print("Training set size and rps: %d, %.2f" % (prod.getDatasetSize(), prod.getRps()))
-    print("Validation set size and rps: %d, %.2f" % (valProd.getDatasetSize(), prod.getRps()))
+    trainRpsStrs = ["%.4f" % rps for rps in prod.getRps()]
+    trainRpsStr = "[" + ", ".join(trainRpsStrs) + "]"
+    print("Training set size, rps: %d, %s" % (prod.getDatasetSize(), trainRpsStr))
+    valRpsStrs = ["%.4f" % rps for rps in prod.getRps()]
+    valRpsStr = "[" + ", ".join(valRpsStrs) + "]"
+    print("Validation set size, rps: %d, %s" % (valProd.getDatasetSize(), valRpsStr))
     #train
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
@@ -70,11 +74,18 @@ def train(dataFile, dataFile2, filterFile, useCoarseOnly, reinitialise, outFile,
                     feed_dict={net.x: inputs, net.y_: outputs, net.p_dropout: 1.0}
                 )
                 valSummaryWriter.add_summary(summary, step)
-                rps = (outputs.argmax(1) == 0).sum() / len(outputs)
-                    #num positive samples / num samples
+                #compute ratio of positive samples
+                if useCoarseOnly:
+                    rpsStr = "%.2f" % ((outputs.argmax(1) == 0).sum() / len(outputs))
+                else:
+                    rpsStrs = [
+                        "%.2f" % ((outputs.argmax(1) == i).sum() / len(outputs))
+                        for i in range(NUM_BOX_TYPES)
+                    ]
+                    rpsStr = "[" + ", ".join(rpsStrs) + "]"
                 print(
-                    "%7.2f secs - step %4d, acc %.2f (%+.2f), prec %.2f, rec %.2f, rps %.2f" %
-                    (time.time() - startTime, step, acc, acc-prevAcc, prec, rec, rps)
+                    "%7.2f secs - step %4d, acc %4.2f (%+4.2f), prec %4.2f, rec %4.2f, rps %s" %
+                    (time.time() - startTime, step, acc, acc-prevAcc, prec, rec, rpsStr)
                 )
                 prevAcc = acc
             #occasionally save variable values

@@ -28,14 +28,16 @@ def genSamples(dataFile, filterFile, useCoarseOnly, outFile, threshold):
             sampleImage,
             (INPUT_WIDTH*i, INPUT_HEIGHT*j, INPUT_WIDTH*(i+1), INPUT_HEIGHT*(j+1))
         )
-        #color sample green if positive
-        if outputs[idx][0] > threshold:
+        output = list(outputs[idx])
+        isPositive = useCoarseOnly and output[0] > threshold or \
+            not useCoarseOnly and output.index(max(output)) != NUM_BOX_TYPES
+        if isPositive:
             draw.rectangle([
                 i     * INPUT_WIDTH,
                 j     * INPUT_HEIGHT,
                 (i+1) * INPUT_WIDTH,
                 (j+1) * INPUT_HEIGHT
-            ], fill=(0,255,0,64))
+            ], fill=(0,255,0,48))
             numPositive += 1
     #output info
     print("Time taken: %.2f secs" % (time.time() - startTime))

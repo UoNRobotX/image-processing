@@ -4,6 +4,9 @@ IMG_CHANNELS = 3
 
 CELL_WIDTH  = 64 #used when marking filtered/water cells
 CELL_HEIGHT = 64
+NUM_BOX_TYPES = 2 #used when marking bounding boxes
+BOX_COLORS = ["blue", "green"]
+assert len(BOX_COLORS) == NUM_BOX_TYPES
 
 INPUT_WIDTH  = 32
 INPUT_HEIGHT = 32

@@ -1,6 +1,6 @@
 import os, time, re, math
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageColor
 import tensorflow as tf
 
 from .constants import *
@@ -68,7 +68,7 @@ def run(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, threshold):
                 writeCoarseResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
             else:
                 result = runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold)
-                writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput, threshold)
+                writeDetailedResult(result, filename, outputFilenames[fileIdx], textOutput)
 
 def runCoarse(filename, cellFilter, coarseNet):
     startTime = time.time()
@@ -117,7 +117,8 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
     image = Image.open(filename)
     #get cell data
     winPositions = GET_WINDOWS()
-    winResults = [None for pos in winPositions] #will contain -2 (filtered), -1 (water), or an output
+    winResults = [None for pos in winPositions]
+        #each element will contain -2 (filtered), -1 (water), None (no object), 0+ (object)
     winImgs = []
     winImgIndices = []
     for winIdx in range(len(winPositions)):
@@ -156,21 +157,25 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
     #use detailed network
     outputs = detailedNet.y.eval(feed_dict={detailedNet.x: inputs, detailedNet.p_dropout: 1.0})
     for i in range(len(outputs)):
-        winResults[winImgIndices[i]] = outputs[i]
+        output = list(outputs[i])
+        maxIdx = output.index(max(output))
+        if maxIdx < NUM_BOX_TYPES:
+            winResults[winImgIndices[i]] = maxIdx
+    #get box lists
     filtered = [
         winPositions[i] for i in range(len(winPositions))
-        if isinstance(winResults[i], int) and winResults[i] == -2
+        if winResults[i] is not None and winResults[i] == -2
     ]
     coarseFiltered = [
         winPositions[i] for i in range(len(winPositions))
-        if isinstance(winResults[i], int) and winResults[i] == -1
+        if winResults[i] is not None and winResults[i] == -1
     ]
     predictions = [
-        winPositions[i] for i in range(len(winPositions))
-        if not isinstance(winResults[i], int) and winResults[i][0] > threshold
+        winPositions[i] + [winResults[i]] for i in range(len(winPositions))
+        if winResults[i] is not None and winResults[i] >= 0
     ]
     #remove some overlapping boxes
-    maxOverlap = 0.2
+    maxOverlapFactor = 0.5
     predictions.sort(key=lambda box: (box[2] - box[0]) * (box[3] - box[1]), reverse=True) #sort by area
     removed = [False for box in predictions]
     for i in range(len(predictions)):
@@ -185,15 +190,16 @@ def runDetailed(filename, cellFilter, coarseNet, detailedNet, threshold):
                 x2 = min(b1[2], b2[2])
                 y2 = min(b1[3], b2[3])
                 overlap = max(0, x2-x1) * max(0,y2-y1)
-                if overlap > maxOverlap:
+                overlapFactor = overlap / (b2[2] - b2[0]) * (b2[3] - b2[1])
+                if overlapFactor > maxOverlapFactor:
                     removed[j] = True
-    boxes = [predictions[i] for i in range(len(predictions)) if not removed[i]]
+    predictions = [predictions[i] for i in range(len(predictions)) if not removed[i]]
     #print info
     processingTime = time.time() - startTime - preProcessingTime
     print("Processed %s, pre-processing time %.2f secs, processing time %.2f secs" % \
         (filename, preProcessingTime, processingTime))
     #return results
-    return filtered, coarseFiltered, boxes
+    return filtered, coarseFiltered, predictions
 
 def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
     FILTER_COLOR = (128, 0, 128, 128)
@@ -235,22 +241,22 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
         #save the image
         image.save(outputFilename)
 
-def writeDetailedResult(result, filename, outputFilename, textOutput, threshold):
+def writeDetailedResult(result, filename, outputFilename, textOutput):
     FILTER_COLOR = (128, 0, 128, 32)
     COARSE_COLOR = (192, 160, 0, 32)
-    BOX_COLOR = (0, 255, 0, 96)
     if textOutput:
         raise Exception("Not implemented")
     else:
         image = Image.open(filename)
         draw = ImageDraw.Draw(image, "RGBA")
-        filtered, coarseFiltered, boxes = result
+        filtered, coarseFiltered, predictions = result
         for box in filtered:
             draw.rectangle(box, fill=FILTER_COLOR)
         for box in coarseFiltered:
             draw.rectangle(box, fill=COARSE_COLOR)
-        for box in boxes:
-            draw.rectangle(box, outline="black", fill=BOX_COLOR)
+        for box in predictions:
+            col = tuple(list(ImageColor.getrgb(BOX_COLORS[box[4]])) + [64])
+            draw.rectangle(box[0:4], outline="black", fill=col)
         #save the image
         image.save(outputFilename)
 

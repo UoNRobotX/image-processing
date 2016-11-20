@@ -30,11 +30,12 @@ description = """
         detailed
             The user marks bounding boxes by clicking and dragging.
             Boxes can be deleted by right-clicking.
+            The digit, tab, and shift-tab keys can be used to select the box type.
             The output contains lines holding image filenames.
             The output contains sections, each describing boxes for an image.
                 Each section starts with a line containing the image filename.
                 Each such line is followed by indented lines.
-                    " 1,2,3,4" specifies a box with top-left 1,2 and bottom-right 3,4.
+                    " 1,2,3,4,0" specifies a box with top-left 1,2, bottom-right 3,4, and type 0.
         windows
             Just display some windows of the image that the networks would be run on.
             No output is written.

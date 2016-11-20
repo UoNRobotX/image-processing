@@ -97,28 +97,28 @@ def createCoarseNetwork(graph, threshold):
                     raise Exception("Unrecognised optimizer")
             #metrics
             with tf.name_scope("metrics"):
-                y_pred = tf.greater(tf.slice(y, [0, 0], [-1, 1]), tf.constant(threshold))
-                y2_pred = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.constant(0.5))
-                correctness = tf.equal(y_pred, y2_pred)
+                pos_pred = tf.greater(tf.slice(y, [0, 0], [-1, 1]), tf.constant(threshold))
+                pos_actual = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.constant(0.5))
+                correct_pred = tf.equal(pos_pred, pos_actual)
                 #accuracy
-                accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+                accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
                 addSummaries(accuracy, summaries, "accuracy", "mean")
                 #precision and recall
-                truePos = tf.reduce_sum(tf.cast(
-                    tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
+                num_pos_true = tf.reduce_sum(tf.cast(
+                    tf.logical_and(pos_pred, pos_actual),
                     tf.float32
                 ))
-                predPos = tf.reduce_sum(tf.cast(y_pred, tf.float32))
-                actualPos = tf.reduce_sum(tf.cast(y2_pred, tf.float32))
+                num_pos_pred = tf.reduce_sum(tf.cast(pos_pred, tf.float32))
+                num_pos_actual = tf.reduce_sum(tf.cast(pos_actual, tf.float32))
                 prec = tf.cond(
-                    tf.equal(predPos, tf.constant(0.0)),
-                    lambda: tf.constant(0.0),
-                    lambda: truePos / predPos
+                    tf.equal(num_pos_pred, tf.constant(0.0)),
+                    lambda: tf.constant(float("NaN")),
+                    lambda: num_pos_true / num_pos_pred
                 )
                 rec  = tf.cond(
-                    tf.equal(actualPos, tf.constant(0.0)),
-                    lambda: tf.constant(0.0),
-                    lambda: truePos / actualPos
+                    tf.equal(num_pos_actual, tf.constant(0.0)),
+                    lambda: tf.constant(float("NaN")),
+                    lambda: num_pos_true / num_pos_actual
                 )
                 addSummaries(prec, summaries, "precision", "mean")
                 addSummaries(rec, summaries, "recall", "mean")
@@ -156,7 +156,7 @@ def createDetailedNetwork(graph):
             with tf.name_scope("input"): #group nodes for easier viewing with tensorboard
                 x = tf.placeholder(tf.float32, \
                     [None, INPUT_HEIGHT, INPUT_WIDTH, IMG_CHANNELS], name="x_input")
-                y_ = tf.placeholder(tf.float32, [None, 2], name="y_input")
+                y_ = tf.placeholder(tf.float32, [None, NUM_BOX_TYPES+1], name="y_input")
                 p_dropout = tf.placeholder(tf.float32, name="p_dropout")
             with tf.name_scope("process_input"):
                 if PREPROCESS_NORMALIZE:
@@ -188,9 +188,9 @@ def createDetailedNetwork(graph):
                     input = tf.nn.dropout(input, p_dropout)
             #readout layer
             with tf.name_scope("readout_layer"):
-                w = createWeights([denseSizes[-1], 2])
-                b = createBiases([2])
-                y  = tf.nn.softmax(tf.matmul(input, w) + b)
+                w = createWeights([denseSizes[-1], NUM_BOX_TYPES+1])
+                b = createBiases([NUM_BOX_TYPES+1])
+                y = tf.nn.softmax(tf.matmul(input, w) + b)
             #cost
             with tf.name_scope("cost"):
                 cost = -(y_ * tf.log(tf.clip_by_value(y,1e-10,1.0)))
@@ -200,28 +200,28 @@ def createDetailedNetwork(graph):
                 train = tf.train.AdamOptimizer().minimize(cost)
             #metrics
             with tf.name_scope("metrics"):
-                y_pred  = tf.greater(tf.slice(y,  [0, 0], [-1, 1]), tf.slice(y,  [0, 1], [-1, 1]))
-                y2_pred = tf.greater(tf.slice(y_, [0, 0], [-1, 1]), tf.slice(y_, [0, 1], [-1, 1]))
-                correctness = tf.equal(y_pred, y2_pred)
+                correct_pred = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
                 #accuracy
-                accuracy = tf.reduce_mean(tf.cast(correctness, tf.float32))
+                accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32))
                 addSummaries(accuracy, summaries, "accuracy", "mean")
                 #precision and recall
-                truePos = tf.reduce_sum(tf.cast(
-                    tf.logical_and(correctness, tf.equal(y_pred, tf.constant(True))),
+                pos_pred   = tf.not_equal(tf.argmax(y,  1), tf.constant(NUM_BOX_TYPES, dtype=tf.int64))
+                pos_actual = tf.not_equal(tf.argmax(y_, 1), tf.constant(NUM_BOX_TYPES, dtype=tf.int64))
+                num_pos_true = tf.reduce_sum(tf.cast(
+                    tf.logical_and(correct_pred, pos_pred),
                     tf.float32
                 ))
-                predPos = tf.reduce_sum(tf.cast(y_pred, tf.float32))
-                actualPos = tf.reduce_sum(tf.cast(y2_pred, tf.float32))
+                num_pos_pred = tf.reduce_sum(tf.cast(pos_pred, tf.float32))
+                num_pos_actual = tf.reduce_sum(tf.cast(pos_actual, tf.float32))
                 prec = tf.cond(
-                    tf.equal(predPos, tf.constant(0.0)),
-                    lambda: tf.constant(0.0),
-                    lambda: truePos / predPos
+                    tf.equal(num_pos_pred, tf.constant(0.0)),
+                    lambda: tf.constant(float("NaN")),
+                    lambda: num_pos_true / num_pos_pred
                 )
                 rec  = tf.cond(
-                    tf.equal(actualPos, tf.constant(0.0)),
-                    lambda: tf.constant(0.0),
-                    lambda: truePos / actualPos
+                    tf.equal(num_pos_actual, tf.constant(0.0)),
+                    lambda: tf.constant(float("NaN")),
+                    lambda: num_pos_true / num_pos_actual
                 )
                 addSummaries(prec, summaries, "precision", "mean")
                 addSummaries(rec, summaries, "recall", "mean")

@@ -53,7 +53,7 @@ parser.add_argument("-o", dest="outFile", \
         When running or generating samples, specifies the output image file.")
 parser.add_argument("-t", dest="threshold", type=float, default=0.5, \
     help="Affects the precision-recall tradeoff.\
-        Network positive predictions will be those with an output above this value.\
+        For the coarse network, positive predictions will be those with an output above this value.\
         The default is 0.5.")
 
 args = parser.parse_args()

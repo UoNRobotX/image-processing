@@ -19,10 +19,11 @@ class Window:
         #fields used to hold mark data
         self.sel           = [[0,0], [0,0]] #corners of a box created while dragging the mouse
         self.box           = None   #holds the ID of a rectangle shown while dragging the mouse
-        self.boxCoords     = []     #[[x,y,x,y], ...], describes created boxes or marked cells
+        self.boxCoords     = []     #[[x,y,x,y,t], ...], describes created boxes
         self.boxIDs        = []     #holds IDs of elements in "boxCoords"
         self.cells         = []     #cells[col][row] is an ID or None, indicating cell marked-ness
         self.mouseDownCell = [0, 0] #specifies the last cell the mouse was in while held down
+        self.boxType       = 0      #the current box type being marked
         #skip to a file if requested
         if skipFile != None:
             found = False
@@ -90,7 +91,6 @@ class Window:
         self.canvas.bind("<Configure>", self.resizeCallback)
         self.canvas.bind("<Button-1>",  self.markCellClickCallback)
         self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
-        self.window.bind("<Return>",    self.markFilterNextCallback)
         self.window.bind("<Right>",     self.markFilterNextCallback)
         self.window.bind("<Left>",      self.markFilterPrevCallback)
         self.window.bind("<Escape>",    self.markFilterEscapeCallback)
@@ -107,30 +107,34 @@ class Window:
         self.canvas.bind("<Configure>", self.resizeCallback)
         self.canvas.bind("<Button-1>",  self.markCellClickCallback)
         self.canvas.bind("<B1-Motion>", self.markCellMoveCallback)
-        self.window.bind("<Return>",    self.markCoarseNextCallback)
         self.window.bind("<Right>",     self.markCoarseNextCallback)
         self.window.bind("<Left>",      self.markCoarsePrevCallback)
         self.window.bind("<Escape>",    self.markCoarseEscapeCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markCoarseEscapeCallback)
     def setupMarkDetailed(self):
-        #load boxes if present
+        self.setTitleWithMode()
         filename = self.filenames[self.fileIdx]
+        #load boxes if present
         if self.fileMarks[filename] != None:
             for box in self.fileMarks[filename]:
                 self.boxCoords.append(box)
-                self.boxIDs.append(
-                    self.canvas.create_rectangle(box[0], box[1], box[2], box[3])
-                )
+                self.boxIDs.append(self.canvas.create_rectangle(
+                    box[0], box[1], box[2], box[3],
+                    outline=BOX_COLORS[box[4]],
+                    width=2
+                ))
         #set handlers
         self.canvas.bind("<Configure>",       self.resizeCallback)
         self.canvas.bind("<Button-1>",        self.markDetailedClickCallback)
         self.canvas.bind("<B1-Motion>",       self.markDetailedMoveCallback)
         self.canvas.bind("<ButtonRelease-1>", self.markDetailedReleaseCallback)
         self.canvas.bind("<Button-3>",        self.markDetailedRightClickCallback)
-        self.window.bind("<Return>",          self.markDetailedNextCallback)
         self.window.bind("<Right>",           self.markDetailedNextCallback)
         self.window.bind("<Left>",            self.markDetailedPrevCallback)
         self.window.bind("<Escape>",          self.markDetailedEscapeCallback)
+        self.window.bind("<Tab>",             self.markDetailedTabCallback)
+        for i in range(min(9, NUM_BOX_TYPES)):
+            self.window.bind(str(i+1), self.markDetailedDigitCallback)
         self.window.protocol("WM_DELETE_WINDOW", self.markDetailedEscapeCallback)
     def setupShowWindows(self):
         colors = ["red", "green", "blue", "yellow", "pink", "brown", "black"]
@@ -200,26 +204,24 @@ class Window:
             self.mouseDownCell = [i, j]
             self.toggleCell(i,j)
     def markFilterNextCallback(self, event, forward=True):
+        #do nothing if at first or last file
+        if not forward and self.fileIdx == 0 or forward and self.fileIdx == len(self.filenames) -1:
+            return
         #move to next file, or exit
-        if forward:
-            self.fileIdx += 1
-        else:
-            self.fileIdx = max(self.fileIdx-1, 0)
-        if self.fileIdx < len(self.filenames):
-            self.window.title(self.filenames[self.fileIdx]) #rename window
-            #load new image
-            self.canvas.delete(self.canvasImage)
-            self.image = Image.open(self.filenames[self.fileIdx])
-            checkImage(self.image, self.filenames[self.fileIdx])
-            self.imageTk = ImageTk.PhotoImage(
-                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
-            )
-            self.canvasImage = self.canvas.create_image(
-                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
-            )
-            self.canvas.tag_lower(self.canvasImage) #move image to back
-        else:
-            self.fileIdx -= 1
+        self.fileIdx = self.fileIdx + 1 if forward else self.fileIdx - 1
+        filename = self.filenames[self.fileIdx]
+        self.window.title(filename)
+        #load new image
+        self.canvas.delete(self.canvasImage)
+        self.image = Image.open(filename)
+        checkImage(self.image, filename)
+        self.imageTk = ImageTk.PhotoImage(
+            self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+        )
+        self.canvasImage = self.canvas.create_image(
+            self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+        )
+        self.canvas.tag_lower(self.canvasImage) #move image to back
     def markFilterPrevCallback(self, event):
         self.markFilterNextCallback(None, forward=False)
     def markFilterEscapeCallback(self, event=None):
@@ -256,53 +258,51 @@ class Window:
                 image.save(self.saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
     def markCoarseNextCallback(self, event, forward=True):
+        #do nothing if at first or last file
+        if not forward and self.fileIdx == 0 or forward and self.fileIdx == len(self.filenames) -1:
+            return
+        #move to next file
+        self.fileIdx = self.fileIdx + 1 if forward else self.fileIdx - 1
         #store mark info
         self.fileMarks[self.filenames[self.fileIdx]] = [
             [0 if self.cells[col][row] == None else 1 for col in range(len(self.cells))]
             for row in range(len(self.cells[0]))
         ]
-        #move to next file, or exit
-        if forward:
-            self.fileIdx += 1
-        else:
-            self.fileIdx = max(self.fileIdx-1, 0)
-        if self.fileIdx < len(self.filenames):
-            filename = self.filenames[self.fileIdx]
-            self.window.title(filename) #rename window
-            #remove colored boxes
-            for i in range(len(self.cells)):
-                for j in range(len(self.cells[i])):
-                    self.canvas.delete(self.cells[i][j])
-                    self.cells[i][j] = None
-            #load colored boxes if present
-            if self.fileMarks[filename] != None:
-                info = self.fileMarks[filename]
-                for row in range(len(info)):
-                    for col in range(len(info[0])):
-                        if info[row][col] == 1:
-                            self.toggleCell(col, row)
-            #load new image
-            self.canvas.delete(self.canvasImage)
-            self.image = Image.open(filename)
-            checkImage(self.image, self.filenames[self.fileIdx])
-            self.imageTk = ImageTk.PhotoImage(
-                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
-            )
-            self.canvasImage = self.canvas.create_image(
-                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
-            )
-            self.canvas.tag_lower(self.canvasImage) #move image to back
-        else:
-            self.fileIdx -= 1
+        #move to next file
+        self.fileIdx = self.fileIdx + 1 if forward else self.fileIdx - 1
+        filename = self.filenames[self.fileIdx]
+        self.window.title(filename) #rename window
+        #remove colored boxes
+        for i in range(len(self.cells)):
+            for j in range(len(self.cells[i])):
+                self.canvas.delete(self.cells[i][j])
+                self.cells[i][j] = None
+        #load colored boxes if present
+        if self.fileMarks[filename] != None:
+            info = self.fileMarks[filename]
+            for row in range(len(info)):
+                for col in range(len(info[0])):
+                    if info[row][col] == 1:
+                        self.toggleCell(col, row)
+        #load new image
+        self.canvas.delete(self.canvasImage)
+        self.image = Image.open(filename)
+        checkImage(self.image, self.filenames[self.fileIdx])
+        self.imageTk = ImageTk.PhotoImage(
+            self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+        )
+        self.canvasImage = self.canvas.create_image(
+            self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+        )
+        self.canvas.tag_lower(self.canvasImage) #move image to back
     def markCoarsePrevCallback(self, event):
         self.markCoarseNextCallback(None, forward=False)
     def markCoarseEscapeCallback(self, event=None):
         #store info
-        if self.fileIdx < len(self.filenames):
-            self.fileMarks[self.filenames[self.fileIdx]] = [
-                [0 if self.cells[col][row] == None else 1 for col in range(len(self.cells))]
-                for row in range(len(self.cells[0]))
-            ]
+        self.fileMarks[self.filenames[self.fileIdx]] = [
+            [0 if self.cells[col][row] == None else 1 for col in range(len(self.cells))]
+            for row in range(len(self.cells[0]))
+        ]
         #output info
         f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
         for filename in self.filenames:
@@ -348,7 +348,9 @@ class Window:
         self.sel[1] = [event.x, event.y]
         self.canvas.delete(self.box)
         self.box = self.canvas.create_rectangle(
-            self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1], outline="red", width=2
+            self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1],
+            outline=BOX_COLORS[self.boxType],
+            width=2
         )
     def markDetailedReleaseCallback(self, event):
         self.sel[1] = [event.x, event.y]
@@ -370,7 +372,9 @@ class Window:
         #add box
         self.boxIDs.append(
             self.canvas.create_rectangle(
-                self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]
+                self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1], \
+                outline=BOX_COLORS[self.boxType],
+                width=2
             )
         )
         #convert to non-scaled image coordinates
@@ -381,7 +385,9 @@ class Window:
         self.sel[1][0] = int(self.sel[1][0] * wscale)
         self.sel[1][1] = int(self.sel[1][1] * hscale)
         #store bounding box
-        self.boxCoords.append([self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1]])
+        self.boxCoords.append(
+            [self.sel[0][0], self.sel[0][1], self.sel[1][0], self.sel[1][1], self.boxType]
+        )
     def markDetailedRightClickCallback(self, event):
         #convert click coordinate to non-scaled image coordinates
         x = int(event.x / self.canvasWidth * IMG_WIDTH)
@@ -397,59 +403,54 @@ class Window:
             self.boxCoords[i:i+1] = []
             self.boxIDs[i:i+1] = []
     def markDetailedNextCallback(self, event, forward=True):
+        #do nothing if moving before first or after last file
+        if not forward and self.fileIdx == 0 or forward and self.fileIdx == len(self.filenames) -1:
+            return
         #store box info
         self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
-        #move to next file, or exit
-        if forward:
-            self.fileIdx += 1
-        else:
-            self.fileIdx = max(self.fileIdx-1, 0)
-        if self.fileIdx < len(self.filenames):
-            filename = self.filenames[self.fileIdx]
-            self.window.title(filename) #rename window
-            self.canvas.delete(tkinter.ALL) #remove image and boxes
-            self.boxIDs = []
-            self.boxCoords = []
-            #load boxes if present
-            if self.fileMarks[filename] != None:
-                for box in self.fileMarks[filename]:
-                    self.boxCoords.append(box)
-                    self.boxIDs.append(
-                        self.canvas.create_rectangle(
-                            int(box[0] / IMG_WIDTH  * self.canvasWidth),
-                            int(box[1] / IMG_HEIGHT * self.canvasHeight),
-                            int(box[2] / IMG_WIDTH  * self.canvasWidth),
-                            int(box[3] / IMG_HEIGHT * self.canvasHeight)
-                        )
+        #move to next file
+        self.fileIdx = self.fileIdx + 1 if forward else self.fileIdx - 1
+        filename = self.filenames[self.fileIdx]
+        self.setTitleWithMode()
+        self.canvas.delete(tkinter.ALL) #remove image and boxes
+        self.boxIDs = []
+        self.boxCoords = []
+        #load boxes if present
+        if self.fileMarks[filename] != None:
+            for box in self.fileMarks[filename]:
+                self.boxCoords.append(box)
+                self.boxIDs.append(
+                    self.canvas.create_rectangle(
+                        int(box[0] / IMG_WIDTH  * self.canvasWidth),
+                        int(box[1] / IMG_HEIGHT * self.canvasHeight),
+                        int(box[2] / IMG_WIDTH  * self.canvasWidth),
+                        int(box[3] / IMG_HEIGHT * self.canvasHeight),
+                        outline=BOX_COLORS[box[4]],
+                        width=2
                     )
-            #load new image
-            self.image = Image.open(self.filenames[self.fileIdx])
-            checkImage(self.image, self.filenames[self.fileIdx])
-            self.imageTk = ImageTk.PhotoImage(
-                self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
-            )
-            self.canvasImage = self.canvas.create_image(
-                self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
-            )
-            self.canvas.tag_lower(self.canvasImage) #move image to back
-        else:
-            self.fileIdx -= 1
+                )
+        #load new image
+        self.image = Image.open(filename)
+        checkImage(self.image, filename)
+        self.imageTk = ImageTk.PhotoImage(
+            self.image.resize((self.canvasWidth, self.canvasHeight), resample=Image.LANCZOS)
+        )
+        self.canvasImage = self.canvas.create_image(
+            self.canvasWidth//2, self.canvasHeight//2, image=self.imageTk
+        )
+        self.canvas.tag_lower(self.canvasImage) #move image to back
     def markDetailedPrevCallback(self, event):
         self.markDetailedNextCallback(None, False)
     def markDetailedEscapeCallback(self, event=None):
         #store box info
-        if self.fileIdx < len(self.filenames):
-            self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
+        self.fileMarks[self.filenames[self.fileIdx]] = self.boxCoords
         #output box info
         f = sys.stdout if self.outputFile == None else open(self.outputFile, "w")
         for filename in self.filenames:
             if self.fileMarks[filename] != None:
                 print(filename, file=f)
                 for box in self.fileMarks[filename]:
-                    print(" ", end="", file=f)
-                    for coord in box[:-1]:
-                        print(str(coord) + ", ", end="", file=f)
-                    print(box[-1], file=f)
+                    print(" " + ",".join([str(val) for val in box]), file=f)
         if not f is sys.stdout:
             f.close()
         #save images if requested
@@ -460,9 +461,19 @@ class Window:
                     image = Image.open(filename)
                     draw = ImageDraw.Draw(image, "RGBA")
                     for box in self.fileMarks[filename]:
-                        draw.rectangle([box[0], box[1], box[2], box[3]], outline=(255,0,0))
+                        draw.rectangle(
+                            [box[0], box[1], box[2], box[3]],
+                            outline=BOX_COLORS[box[4]],
+                            width=2
+                        )
                     image.save(self.saveDir + "/" + os.path.basename(filename))
         sys.exit(0)
+    def markDetailedTabCallback(self, event):
+        self.boxType = (self.boxType + 1) % NUM_BOX_TYPES
+        self.setTitleWithMode()
+    def markDetailedDigitCallback(self, event):
+        self.boxType = int(str(event.char))-1
+        self.setTitleWithMode()
     def showWindowsEscapeCallback(self, event=None):
         if self.saveDir != None:
             raise Exception("Saving images is not implemented")
@@ -483,6 +494,9 @@ class Window:
                 fill="green",
                 stipple="gray50"
             )
+    def setTitleWithMode(self):
+        filename = self.filenames[self.fileIdx]
+        self.window.title(filename + ", type " + str(self.boxType+1) + "/" + str(NUM_BOX_TYPES))
 
 def checkImage(image, filename):
     if image.size[0] != IMG_WIDTH or image.size[1] != IMG_HEIGHT:

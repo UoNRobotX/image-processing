@@ -14,12 +14,14 @@ class CoarseBatchProducer:
         self.negInputIndices = []
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
+            print("Reading data from binary file")
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
             self.posInputIndices = data["arr_2"]
             self.negInputIndices = data["arr_3"]
         else:
+            print("Generating data")
             filenames = []
             waterCells = []
             with open(dataFile) as file:
@@ -39,6 +41,7 @@ class CoarseBatchProducer:
             self.loadImages(filenames, cellFilter, waterCells)
         #save data if requested
         if outFile != None:
+            print("Saving data to binary file")
             np.savez_compressed(outFile, \
                 self.inputs, self.outputs, self.posInputIndices, self.negInputIndices)
     #load next image
@@ -142,9 +145,9 @@ class CoarseBatchProducer:
     #returns the data set size
     def getDatasetSize(self):
         return len(self.inputs)
-    #returns the ratio of positive to negative inputs
+    #returns the ratio of positive inputs
     def getRps(self):
-        return len(self.posInputIndices) / len(self.negInputIndices)
+        return [len(self.posInputIndices) / len(self.inputs)]
 
 class DetailedBatchProducer:
     """Produces input values for the detailed network"""
@@ -152,16 +155,18 @@ class DetailedBatchProducer:
     def __init__(self, dataFile, cellFilter, outFile=None):
         self.inputs  = []
         self.outputs = []
-        self.posInputIndices = []
-        self.negInputIndices = []
+        self.posInputIndices = [] #list of lists of indices, with one indices list for each box type
+        self.negInputIndices = [] #list of indices
         #read "dataFile"
         if re.search(r"\.npz$", dataFile):
+            print("Reading data from binary file")
             data = np.load(dataFile)
             self.inputs = data["arr_0"]
             self.outputs = data["arr_1"]
             self.posInputIndices = data["arr_2"]
             self.negInputIndices = data["arr_3"]
         else:
+            print("Generating data")
             filenames = []
             boxes = []
             with open(dataFile) as file:
@@ -181,49 +186,43 @@ class DetailedBatchProducer:
             self.loadImages(filenames, cellFilter, boxes)
         #save data if requested
         if outFile != None:
+            print("Saving data to binary file")
             np.savez_compressed(outFile, \
                 self.inputs, self.outputs, self.posInputIndices, self.negInputIndices)
     #load next image
     def loadImages(self, filenames, cellFilter, boxes):
+        #get window positions
+        windowPositions = GET_WINDOWS()
+        #iterate through images
         for fileIdx in range(len(filenames)):
             #obtain PIL image
             image = Image.open(filenames[fileIdx])
-            #get window positions
-            windowPositions = GET_WINDOWS()
             for pos in windowPositions:
-                topLeftX = pos[0]
-                topLeftY = pos[1]
+                topLeftX     = pos[0]
+                topLeftY     = pos[1]
                 bottomRightX = pos[2]
                 bottomRightY = pos[3]
                 #use static filter
                 if isFiltered(topLeftX, topLeftY, bottomRightX, bottomRightY, cellFilter):
                     continue
                 #determine whether the input should have a positive prediction
-                containsBuoy = False
+                containedType = None
+                prevOverlap = 0
+                winArea = (bottomRightX-topLeftX) * (bottomRightY-topLeftY)
                 for box in boxes[fileIdx]:
-                    if True: #only accept if a buoy is fully contained
-                        if (box[0] >= topLeftX and
-                            box[1] >= topLeftY and
-                            box[2] <= bottomRightX and
-                            box[3] <= bottomRightY):
-                            #and is no less than a minimum overlap ratio
-                            boxArea = (box[2]-box[0]) * (box[3]-box[1])
-                            winArea = (bottomRightX-topLeftX) * (bottomRightY-topLeftY)
-                            if boxArea / winArea >= 0.3:
-                                containsBuoy = True
-                                break
-                    else: #impose overlap by least some factor, horizontally and vertically
-                        f = 0.4
-                        boxWidth = box[2]-box[0]
-                        boxHeight = box[3]-box[1]
-                        if (not box[2] < topLeftX     + boxWidth*f  and
-                            not box[0] > bottomRightX - boxWidth*f  and
-                            not box[3] < topLeftY     + boxHeight*f and
-                            not box[1] > bottomRightY - boxHeight*f):
-                            containsBuoy = True
-                            break
+                    #only accept if a box is fully contained
+                    if (box[0] >= topLeftX and
+                        box[1] >= topLeftY and
+                        box[2] <= bottomRightX and
+                        box[3] <= bottomRightY):
+                        #and has at least a minimum overlap
+                        boxArea = (box[2]-box[0]) * (box[3]-box[1])
+                        overlap = boxArea / winArea
+                        if overlap >= 0.3 and overlap > prevOverlap:
+                            containedType = box[4]
+                            prevOverlap = overlap
                 #randomly skip
-                if not containsBuoy and random.random() < 0.7:
+                if containedType is None and random.random() < 0.7:
                     continue
                 #get window image
                 winImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
@@ -232,12 +231,12 @@ class DetailedBatchProducer:
                 winImgs = [winImg]
                 if False: #maximise image contrast
                     winImgs = [ImageOps.autocontrast(img) for img in winImgs]
-                if True and containsBuoy: #add rotated images
+                if True and containedType is not None: #add rotated images
                     winImgs += [img.rotate(180) for img in winImgs]
                     winImgs += [img.rotate(90) for img in winImgs]
-                if True and containsBuoy: #add flipped images
+                if True and containedType is not None: #add flipped images
                     winImgs += [img.transpose(Image.FLIP_LEFT_RIGHT) for img in winImgs]
-                if True and containsBuoy: #blur image
+                if True and containedType is not None: #blur image
                     blurRadii = [1.0]
                     blurredImages = []
                     for radius in blurRadii:
@@ -245,7 +244,7 @@ class DetailedBatchProducer:
                             img.filter(ImageFilter.GaussianBlur(radius)) for img in winImgs
                         ]
                     winImgs += blurredImages
-                if True and containsBuoy: #add sheared images
+                if True and containedType is not None: #add sheared images
                     shearedImages = []
                     for maxShearFactor in [0.1, 0.2]:
                         shearFactor = random.random()*maxShearFactor*2 - maxShearFactor
@@ -264,50 +263,71 @@ class DetailedBatchProducer:
                 #get inputs
                 self.inputs += [np.array(img).astype(np.float32) for img in winImgs]
                 #get outputs
-                self.outputs += [
-                    np.array([1, 0]).astype(np.float32) if containsBuoy else
-                    np.array([0, 1]).astype(np.float32)
-                ] * len(winImgs)
+                output = [0 for i in range(NUM_BOX_TYPES+1)]
+                if containedType is not None:
+                    output[containedType] = 1
+                else:
+                    output[-1] = 1
+                output = np.array(output).astype(np.float32)
+                for img in range(len(winImgs)):
+                    self.outputs.append(output)
                 if len(self.inputs) == 0:
                     raise Exception("No inputs")
         if len(self.inputs) == 0:
             raise Exception("No inputs")
         #get indices of positive/negative inputs
-        self.posInputIndices = [
-            i for i in range(len(self.inputs)) if self.outputs[i][0]
-        ]
+        for typeIdx in range(NUM_BOX_TYPES):
+            self.posInputIndices.append([
+                i for i in range(len(self.inputs)) if self.outputs[i][typeIdx]
+            ])
+            if len(self.posInputIndices[-1]) == 0:
+                raise Exception("No positive inputs for type %d" % typeIdx)
         self.negInputIndices = [
-            i for i in range(len(self.inputs)) if not self.outputs[i][0]
+            i for i in range(len(self.inputs)) if self.outputs[i][-1]
         ]
-        if len(self.posInputIndices) == 0:
-            raise Exception("No positive inputs")
         if len(self.negInputIndices) == 0:
             raise Exception("No negative inputs")
     #returns a tuple containing a numpy array of "size" inputs, and a numpy array of "size" outputs
     def getBatch(self, size):
         inputs = []
         outputs = []
-        c = 0
-        while c < size:
-            #randomly select an input and output
-            detailedChoosePositive = random.random() < 0.03
-            if detailedChoosePositive:
-                idx = math.floor(random.random() * len(self.posInputIndices))
-                inputs.append(self.inputs[self.posInputIndices[idx]])
-                outputs.append(self.outputs[self.posInputIndices[idx]])
-            else:
-                idx = math.floor(random.random() * len(self.negInputIndices))
-                inputs.append(self.inputs[self.negInputIndices[idx]])
-                outputs.append(self.outputs[self.negInputIndices[idx]])
-            #update
-            c += 1
+        #randomly select inputs and outputs
+        if False: #choose inputs randomly
+            for i in range(size):
+                idx = math.floor(random.random() * len(inputs))
+                inputs.append(self.inputs[idx])
+                outputs.append(self.outputs[idx])
+        else: #control proportions of positive and negative inputs
+            POS_PROBS = [0.3, 0.3, 0.4] #proportions of input type_0/type_1/etc/no_object
+            assert len(POS_PROBS) == NUM_BOX_TYPES + 1 and sum(POS_PROBS) == 1
+            cumPosProbs = [sum(POS_PROBS[:i+1]) for i in range(len(POS_PROBS))]
+            for i in range(size):
+                choice = random.random()
+                for j in range(len(cumPosProbs)):
+                    if choice < cumPosProbs[j]:
+                        choice = j
+                        break
+                if choice < NUM_BOX_TYPES:
+                    idx = math.floor(random.random() * len(self.posInputIndices[choice]))
+                    idx = self.posInputIndices[choice][idx]
+                    inputs.append(self.inputs[idx])
+                    outputs.append(self.outputs[idx])
+                else:
+                    idx = math.floor(random.random() * len(self.negInputIndices))
+                    idx = self.negInputIndices[idx]
+                    inputs.append(self.inputs[idx])
+                    outputs.append(self.outputs[idx])
         return np.array(inputs), np.array(outputs)
     #returns the data set size
     def getDatasetSize(self):
         return len(self.inputs)
-    #returns the ratio of positive to negative inputs
+    #returns the ratio of positive inputs
     def getRps(self):
-        return len(self.posInputIndices) / len(self.negInputIndices)
+        rpsVals = [
+            len(self.posInputIndices[i]) / len(self.inputs)
+            for i in range(NUM_BOX_TYPES)
+        ]
+        return rpsVals
 
 def getCellFilter(filterFile):
     """ Obtains filter data from "filterFile", or uses an empty filter.

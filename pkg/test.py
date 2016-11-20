@@ -24,7 +24,9 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
         summaryDir = DETAILED_SUMMARIES + "/test"
         saveFile = DETAILED_SAVE_FILE
     print("Startup time: %.2f secs" % (time.time() - startTime))
-    print("Testing set size and rps: %d, %.2f" % (prod.getDatasetSize(), prod.getRps()))
+    rpsStrs = ["%.4f" % rps for rps in prod.getRps()]
+    rpsStr = "[" + ", ".join(rpsStrs) + "]"
+    print("Testing set size, rps: %d, %s" % (prod.getDatasetSize(), rpsStr))
     #test
     startTime = time.time()
     summaryWriter = tf.train.SummaryWriter(summaryDir, net.graph)
@@ -57,13 +59,13 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
             summaryWriter.add_summary(summary, step)
             if step % TESTING_LOG_PERIOD == 0:
                 print(
-                    "%7.2f secs - step %4d, acc %.2f, prec %.2f, rec %.2f" %
+                    "%7.2f secs - step %4d, acc %4.2f, prec %4.2f, rec %4.2f" %
                     (time.time()-startTime, step, acc, prec, rec)
                 )
     accs  = [m[0] for m in metrics]
     precs = [m[1] for m in metrics]
     recs  = [m[2] for m in metrics]
-    print("Averages: accuracy %.2f, precision %.2f, recall %.2f" % \
+    print("Averages: accuracy %4.2f, precision %4.2f, recall %4.2f" % \
         (avg(accs), avg(precs), avg(recs)))
     summaryWriter.close()
 

@@ -10,14 +10,14 @@ set -e
 echo "Training coarse net"
 ./main.sh train coarse -s 3000 -n
 
-#train the detailed network
-echo "Training detailed net"
-sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.25/' pkg/network_input.py
-./main.sh train detailed -s 3000 -n
-sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.1/' pkg/network_input.py
-./main.sh train detailed -s 3000
-sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.03/' pkg/network_input.py
-./main.sh train detailed -s 3000
+##train the detailed network
+#echo "Training detailed net"
+#sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.25/' pkg/network_input.py
+#./main.sh train detailed -s 3000 -n
+#sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.1/' pkg/network_input.py
+#./main.sh train detailed -s 3000
+#sed -i 's/\(detailedChoosePositive = random.random() <\) [0-9.]\+/\1 0.03/' pkg/network_input.py
+#./main.sh train detailed -s 3000
 
 #run the coarse network on the images
 echo "Running coarse net"
