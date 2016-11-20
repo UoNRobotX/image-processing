@@ -1,4 +1,4 @@
-import os, time
+import os, time, math
 import tensorflow as tf
 
 from .constants import *
@@ -63,11 +63,13 @@ def test(dataFile, filterFile, useCoarseOnly, reinitialise, outFile, numSteps, t
                     (time.time()-startTime, step, acc, prec, rec)
                 )
     accs  = [m[0] for m in metrics]
-    precs = [m[1] for m in metrics]
-    recs  = [m[2] for m in metrics]
+    precs = [m[1] for m in metrics if not math.isnan(m[1])]
+    recs  = [m[2] for m in metrics if not math.isnan(m[2])]
     print("Averages: accuracy %4.2f, precision %4.2f, recall %4.2f" % \
         (avg(accs), avg(precs), avg(recs)))
     summaryWriter.close()
 
 def avg(nums):
+    if len(nums) == 0:
+        return 0
     return sum(nums)/len(nums)

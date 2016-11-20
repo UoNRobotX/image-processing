@@ -90,14 +90,8 @@ detailed: (batch size 50, 500 test steps)
                 rps ~0.25, then ~0.1, then ~0.04 rps
                 3000, 3000, 3000 - 0.99, 0.54, 0.45
                 //current
-    second modified training/validation/testing set:
-        conv (5x5->16, max, 5x5->32, max), dense (64->2), dropout 0.9, cross entropy cost, adam, normalise input
-            reduced ratio of positive samples (to about 0.3):
-                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
-                    partial buoy containment:
-                        3000 - 0.94, 0.98, 0.83 //ok-ish
-            use ~0.3 rps (rotate and flip only), then train with ~0.06 rps (nothing):
-                variable cell size (450-700, 1/2 and 1/2, ((y-400)*(175/(300)) + 15) / 2):
-                    partial buoy containment:
-                        3000, 3000 - 0.98, 0.78, 0.69 //ok
-                        3000, 6000 - 0.98, 0.79, 0.71 //ok
+    2 object types:
+        [16, 32], 1, 2, [64], relu, dropout 0.9, cross entropy cost, adam, normalise input
+            sliding window, 32x32, [1.0,1.5,2.5], [0.42,0.44,0.5] & [0.55,0.65,0.68], 5/12 & 5/12, 
+                rps [0.3, 0.3, 0.4] then [0.03, 0.03, 0.94]
+                    2000, 3000 - 0.98, 0.93, 0.64 //ok

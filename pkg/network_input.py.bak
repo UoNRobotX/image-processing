@@ -298,7 +298,7 @@ class DetailedBatchProducer:
                 inputs.append(self.inputs[idx])
                 outputs.append(self.outputs[idx])
         else: #control proportions of positive and negative inputs
-            POS_PROBS = [0.3, 0.3, 0.4] #proportions of input type_0/type_1/etc/no_object
+            POS_PROBS = [0.03, 0.03, 0.94] #proportions of input type_0/type_1/etc/no_object
             assert len(POS_PROBS) == NUM_BOX_TYPES + 1 and sum(POS_PROBS) == 1
             cumPosProbs = [sum(POS_PROBS[:i+1]) for i in range(len(POS_PROBS))]
             for i in range(size):
