@@ -222,7 +222,7 @@ class DetailedBatchProducer:
                             containedType = box[4]
                             prevOverlap = overlap
                 #randomly skip
-                if containedType is None and random.random() < 0.7:
+                if containedType is None and random.random() < 0.8:
                     continue
                 #get window image
                 winImg = image.crop((topLeftX, topLeftY, bottomRightX, bottomRightY))
