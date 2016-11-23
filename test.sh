@@ -16,6 +16,11 @@ sed -i 's/\(choosePositive = random.random() <\) [0-9., ]\+/\1 0.5/' pkg/network
 #train the detailed network
 echo "Training detailed net"
 ./main.sh train detailed -s 3000 -n
+sed -i 's/\(POS_PROBS =\) \[[0-9., ]\+\]/\1 [0.1, 0.1, 0.8]/' pkg/network_input.py
+./main.sh train detailed -s 3000
+sed -i 's/\(POS_PROBS =\) \[[0-9., ]\+\]/\1 [0.04, 0.04, 0.92]/' pkg/network_input.py
+./main.sh train detailed -s 3000
+sed -i 's/\(POS_PROBS =\) \[[0-9., ]\+\]/\1 [0.25, 0.25, 0.5]/' pkg/network_input.py
 
 #run the coarse network on the images
 echo "Running coarse net"
