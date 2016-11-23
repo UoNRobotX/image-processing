@@ -20,20 +20,20 @@ class Network:
 def createCoarseNetwork(graph, threshold):
     #parameters for network variations
     PREPROCESS_NORMALIZE = True
-    ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
-    OUTPUT_ACTIVATION_FUNC = tf.nn.sigmoid #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
-    HIDDEN_LAYERS = [30, 10]
-    COST_FUNC = "squared_error" #"squared_error", "logistic_loss", "softmax_cross_entropy_with_logits"
+    ACTIVATION_FUNC = tf.nn.elu #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, tf.nn.elu, prelu
+    OUTPUT_ACTIVATION_FUNC = tf.identity #tf.identity, tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
+    HIDDEN_LAYERS = [100, 10]
+    COST_FUNC = "softmax_cross_entropy_with_logits" #"squared_error", "logistic_loss", "softmax_cross_entropy_with_logits"
     OPTIMIZER = "adam" #"adam", "gradient_descent", "adadelta", "adagrad", "momentum"
     USE_DROPOUT = False
     #helper functions
     def createLayer(input, inSize, outSize, layerName, summaries, activation=ACTIVATION_FUNC):
         with tf.name_scope(layerName):
             with tf.name_scope("weights"):
-                w = tf.Variable(tf.truncated_normal([inSize, outSize]))
+                w = tf.Variable(tf.truncated_normal([inSize, outSize], stddev=math.sqrt(2.0/inSize)))
                 addSummaries(w, summaries, layerName + "/weights", "mean_stddev_hist")
             with tf.name_scope("biases"):
-                b = tf.Variable(tf.constant(1.0, shape=[outSize]))
+                b = tf.Variable(tf.constant(0.00001, shape=[outSize]))
                 addSummaries(b, summaries, layerName + "/biases", "mean_stddev_hist")
             wb = tf.matmul(input, w) + b
             if USE_DROPOUT:
@@ -74,6 +74,7 @@ def createCoarseNetwork(graph, threshold):
                     cost = tf.constant(1/math.log(2)) * tf.log(tf.constant(1.0) + tf.exp(-y * y_))
                 elif COST_FUNC == "softmax_cross_entropy_with_logits":
                     cost = tf.nn.softmax_cross_entropy_with_logits(y, y_)
+                    y = tf.nn.softmax(y)
                 else:
                     raise Exception("Unrecognised cost function")
                 addSummaries(cost, summaries, "cost", "mean")

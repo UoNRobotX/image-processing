@@ -24,10 +24,24 @@ coarse: (batch size 1000, 500 test steps)
     use rps ~0.2:
         [30, 10], adam, sigmoid, squared error, normalize inputs, 
             3000 - 0.94, 0.82, 0.90 //mostly ok
-            //current
     use rps ~0.2, then rps ~0.13:
         [30, 10], adam, sigmoid, squared error, normalize inputs, 
             3000, 3000 - 0.97, 0.84, 0.95 //not much better
+    rps ~0.5, 
+        [30, 10], adam, relu and linear out, squared error, normalize inputs, 
+            3000 - 0.92, 0.89, 0.96
+        adam, relu and linear out, sfcewl, normalize inputs, 
+            [40, 10]
+                3000 - 0.91, 0.94, 0.88
+            [50, 10]
+                3000 - 0.92, 0.88, 0.96
+                6000 - 0.93, 0.90, 0.96
+            [100, 10]
+                3000 - 0.95, 0.92, 0.98
+        [100, 10], adam, elu and linear out, sfcewl, normalize inputs, 
+            3000 - 0.95, 0.93, 0.98
+            3000, 3000 (rps ~0.2) - 0.94, 0.99, 0.90
+            //current
 
 detailed: (batch size 50, 500 test steps)
     conv (5x5->32, max, 5x5->64, max), dense (64->2), dropout 0.5, cross entropy cost, adam, normalise input

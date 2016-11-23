@@ -230,14 +230,18 @@ def writeCoarseResult(result, filename, outputFilename, textOutput, threshold):
                 if output is None:
                     draw.rectangle(rect, fill=FILTER_COLOR)
                 else:
-                    rect1 = rect.copy()
-                    rect1[1] += int(CELL_HEIGHT*(1-output[0]))
-                    rect1[2] -= CELL_WIDTH//2
-                    rect2 = rect.copy()
-                    rect2[0] += CELL_WIDTH//2
-                    rect2[3] -= int(CELL_HEIGHT*(1-output[1]))
-                    draw.rectangle(rect1, fill=POS_COLOR)
-                    draw.rectangle(rect2, fill=NEG_COLOR)
+                    if True: #draw one rectangle
+                        rect[1] += int(CELL_HEIGHT*(1-output[0]))
+                        draw.rectangle(rect, fill=POS_COLOR)
+                    else: #draw two rectangles describing both outputs
+                        rect1 = rect.copy()
+                        rect1[1] += int(CELL_HEIGHT*(1-output[0]))
+                        rect1[2] -= CELL_WIDTH//2
+                        rect2 = rect.copy()
+                        rect2[0] += CELL_WIDTH//2
+                        rect2[3] -= int(CELL_HEIGHT*(1-output[1]))
+                        draw.rectangle(rect1, fill=POS_COLOR)
+                        draw.rectangle(rect2, fill=NEG_COLOR)
         #save the image
         image.save(outputFilename)
 

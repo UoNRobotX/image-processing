@@ -130,7 +130,7 @@ class CoarseBatchProducer:
         c = 0
         while c < size:
             #randomly select an input and output
-            choosePositive = random.random() < 0.2
+            choosePositive = random.random() < 0.5
             if choosePositive:
                 idx = math.floor(random.random() * len(self.posInputIndices))
                 inputs.append(self.inputs[self.posInputIndices[idx]])
