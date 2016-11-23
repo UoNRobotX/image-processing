@@ -103,7 +103,6 @@ detailed: (batch size 50, 500 test steps)
             sliding window, 32x32, [1.0,1.5,2.5], [0.42,0.44,0.5] & [0.55,0.65,0.68], 5/12 & 5/12, 
                 rps ~0.25, then ~0.1, then ~0.04 rps
                 3000, 3000, 3000 - 0.99, 0.54, 0.45
-                //current
     2 object types:
         [16, 32], 1, 2, [64], relu, dropout 0.9, cross entropy cost, adam, normalise input
             sliding window, 32x32, [1.0,1.5,2.5], [0.42,0.44,0.5] & [0.55,0.65,0.68], 5/12 & 5/12, 
@@ -113,3 +112,10 @@ detailed: (batch size 50, 500 test steps)
                     3000             - 0.75, 0.74, 0.52
                     3000, 3000       - 0.93, 0.95, 0.67
                     3000, 3000, 3000 - 0.97, 0.96, 0.63 //ok
+                rps [0.25, 0.25, 0.5], modified initialisation
+                    3000 - 0.81, 0.98, 0.63
+                    3x3 //processing time is about halved
+                        3000 - 0.77, 0.84, 0.57
+                        elu, learning rate 0.001
+                            3000 - 0.86, 0.99, 0.72
+                            //current

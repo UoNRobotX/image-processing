@@ -133,14 +133,14 @@ def createDetailedNetwork(graph):
     CONV_STRIDE = 1
     POOL_STRIDE = 2
     DENSE_LAYERS = [64]
-    ACTIVATION_FUNC = tf.nn.relu #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, prelu
+    ACTIVATION_FUNC = tf.nn.elu #tf.nn.sigmoid, tf.nn.tanh, tf.nn.relu, tf.nn.elu, prelu
     #helper functions
     def createWeights(shape):
         with tf.name_scope("weights"):
-            return tf.Variable(tf.truncated_normal(shape, stddev=0.1))
+            return tf.Variable(tf.truncated_normal(shape, stddev=math.sqrt(2.0/prod(shape[:-1]))))
     def createBiases(shape):
         with tf.name_scope("biases"):
-            return tf.Variable(tf.constant(1.0, shape=shape))
+            return tf.Variable(tf.constant(0.00001, shape=shape))
     def createConv(x, w, b):
         with tf.name_scope("conv"):
             xw = tf.nn.conv2d(x, w, strides=[1, CONV_STRIDE, CONV_STRIDE, 1], padding="SAME")
@@ -170,7 +170,7 @@ def createDetailedNetwork(graph):
             input = x2
             for i in range(1, len(convSizes)):
                 with tf.name_scope("conv_layer" + str(i)):
-                    w = createWeights([5, 5, convSizes[i-1], convSizes[i]])
+                    w = createWeights([3, 3, convSizes[i-1], convSizes[i]])
                         #filter_height, filter_width, in_channels, out_channels
                     b = createBiases([convSizes[i]])
                     c = createConv(input, w, b)
@@ -198,7 +198,7 @@ def createDetailedNetwork(graph):
                 addSummaries(cost, summaries, "cost", "mean")
             #optimizer
             with tf.name_scope("train"):
-                train = tf.train.AdamOptimizer().minimize(cost)
+                train = tf.train.AdamOptimizer(0.001).minimize(cost)
             #metrics
             with tf.name_scope("metrics"):
                 correct_pred = tf.equal(tf.argmax(y, 1), tf.argmax(y_, 1))
@@ -248,3 +248,9 @@ def addSummaries(node, summaries, name, method):
 def prelu(x, name=None):
     alphas = tf.Variable(tf.constant(0.0, shape=[x.get_shape()[-1]]))
     return tf.add(tf.nn.relu(x), alphas * (x - abs(x)) * 0.5)
+
+def prod(l):
+    p = 1
+    for val in l:
+        p *= val
+    return p
